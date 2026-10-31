@@ -1,1 +1,72 @@
+# ============================================================
+# 仓库级忽略规则
+# 规则对仓库内所有工程生效（backend/*、frontend/*、docs 等）
+# ============================================================
+
+# ---------- 操作系统生成的文件 ----------
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# ---------- 编辑器 / IDE ----------
 .idea/
+.vscode/
+.fleet/
+.history/
+*.swp
+*.swo
+*~
+
+# ---------- AI 编码工具的个人配置（团队共享配置照常提交） ----------
+.claude/settings.local.json
+CLAUDE.local.md
+AGENTS.override.md
+
+# ---------- 密钥与本地配置（公开仓库，务必严格） ----------
+# 本地环境变量；前端的 .env.development / .env.production 只放接口地址，可以提交
+.env
+.env.local
+.env.*.local
+# 后端本地配置，只提交 config.example.yaml
+**/configs/*.local.yaml
+**/configs/*.local.yml
+# 证书与私钥（含微信支付商户证书 apiclient_key.pem 等）
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# ---------- Go ----------
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# ---------- 前端 / Node ----------
+node_modules/
+dist/
+# Uniapp（HBuilderX）编译产物
+unpackage/
+.vite/
+.eslintcache
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 日志与临时文件 ----------
+logs/
+*.log
+tmp/
+*.tmp
