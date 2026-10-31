@@ -70,3 +70,7 @@ logs/
 *.log
 tmp/
 *.tmp
+
+# 本地工程检查输出
+.reports/
+frontend/web/coverage/

@@ -1,0 +1,471 @@
+---
+openapi: 3.1.0
+info:
+  title: Admin read API draft
+  version: 0.1.0
+  description: RN-SETUP-01 only. Four read endpoints and synthetic previews; no write API, authentication implementation, backend or confirmed currency.
+paths:
+  "/api/admin/products":
+    get:
+      operationId: listProducts
+      summary: Read the product list
+      description: Read-only draft. Administrator identity is required; authentication transport belongs to the login contract and is not implemented here.
+      x-authentication-status: administrator-required-scheme-pending
+      responses:
+        "200":
+          description: Success; empty lists use items and total zero; absent delivery configuration uses data null.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProductListResponse"
+        "401":
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "403":
+          description: Administrator permission denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict scenario for error handling preview
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/api/admin/mall-categories":
+    get:
+      operationId: listMallCategories
+      summary: Read mall categories
+      description: Read-only draft. Administrator identity is required; authentication transport belongs to the login contract and is not implemented here.
+      x-authentication-status: administrator-required-scheme-pending
+      responses:
+        "200":
+          description: Success; empty lists use items and total zero; absent delivery configuration uses data null.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MallCategoryListResponse"
+        "401":
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "403":
+          description: Administrator permission denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict scenario for error handling preview
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/api/admin/delivery":
+    get:
+      operationId: getDelivery
+      summary: Read delivery configuration
+      description: Read-only draft. Administrator identity is required; authentication transport belongs to the login contract and is not implemented here.
+      x-authentication-status: administrator-required-scheme-pending
+      responses:
+        "200":
+          description: Success; empty lists use items and total zero; absent delivery configuration uses data null.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DeliveryResponse"
+        "401":
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "403":
+          description: Administrator permission denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict scenario for error handling preview
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+  "/api/admin/cities":
+    get:
+      operationId: listCities
+      summary: Read cities
+      description: Read-only draft. Administrator identity is required; authentication transport belongs to the login contract and is not implemented here.
+      x-authentication-status: administrator-required-scheme-pending
+      responses:
+        "200":
+          description: Success; empty lists use items and total zero; absent delivery configuration uses data null.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CityListResponse"
+        "401":
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "403":
+          description: Administrator permission denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict scenario for error handling preview
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    Product:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - categoryId
+        - categoryName
+        - imageUrl
+        - priceMinor
+        - currency
+        - bookStock
+        - lockedStock
+        - availableStock
+        - status
+      properties:
+        id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        categoryId:
+          type: string
+          minLength: 1
+        categoryName:
+          type: string
+          minLength: 1
+        imageUrl:
+          type:
+            - string
+            - "null"
+          format: uri
+        priceMinor:
+          type: integer
+          minimum: 1
+          description: Integer minor units. Currency remains unconfirmed when currency is null.
+        currency:
+          type:
+            - string
+            - "null"
+          pattern: "^[A-Z]{3}$"
+          description: Draft currency code; null means not confirmed. Do not assume AUD.
+        bookStock:
+          type: integer
+          minimum: 0
+        lockedStock:
+          type: integer
+          minimum: 0
+        availableStock:
+          type: integer
+          minimum: 0
+          description: Server supplied authoritative value. The browser must not calculate bookStock minus lockedStock.
+        status:
+          type: string
+          enum:
+            - on_sale
+            - out_of_stock
+            - off_shelf
+    MallCategory:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+    City:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - nameZh
+        - nameEn
+        - fulfillment
+      properties:
+        id:
+          type: string
+          minLength: 1
+        nameZh:
+          type: string
+          minLength: 1
+        nameEn:
+          type: string
+          minLength: 1
+        fulfillment:
+          type: string
+          enum:
+            - local
+            - post
+    DeliveryArea:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - cityId
+        - cityNameZh
+        - name
+        - enabled
+      properties:
+        id:
+          type: string
+          minLength: 1
+        cityId:
+          type: string
+          minLength: 1
+        cityNameZh:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        enabled:
+          type: boolean
+    DeliveryTimeSlot:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - startTime
+        - endTime
+        - enabled
+      properties:
+        id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        startTime:
+          type: string
+          pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+        endTime:
+          type: string
+          pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+        enabled:
+          type: boolean
+    DeliveryConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - localFeeMinor
+        - postFeeMinor
+        - freePostThresholdMinor
+        - currency
+        - areas
+        - timeSlots
+      properties:
+        localFeeMinor:
+          type: integer
+          minimum: 0
+        postFeeMinor:
+          type: integer
+          minimum: 0
+        freePostThresholdMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type:
+            - string
+            - "null"
+          pattern: "^[A-Z]{3}$"
+        areas:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DeliveryArea"
+        timeSlots:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DeliveryTimeSlot"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - code
+        - message
+      properties:
+        ok:
+          type: boolean
+          const: false
+        code:
+          type: string
+          enum:
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - VALIDATION_ERROR
+            - CONFLICT
+            - INTERNAL_ERROR
+        message:
+          type: string
+          minLength: 1
+    ProductListData:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Product"
+        total:
+          type: integer
+          minimum: 0
+    ProductListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - data
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          "$ref": "#/components/schemas/ProductListData"
+    MallCategoryListData:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MallCategory"
+        total:
+          type: integer
+          minimum: 0
+    MallCategoryListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - data
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          "$ref": "#/components/schemas/MallCategoryListData"
+    CityListData:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/City"
+        total:
+          type: integer
+          minimum: 0
+    CityListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - data
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          "$ref": "#/components/schemas/CityListData"
+    DeliveryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - data
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          anyOf:
+            - "$ref": "#/components/schemas/DeliveryConfig"
+            - type: "null"

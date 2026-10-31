@@ -1,0 +1,15 @@
+:root {
+  --admin-surface: var(--el-bg-color);
+  --admin-background: var(--el-fill-color-light);
+  --admin-text: var(--el-text-color-primary);
+  --admin-muted: var(--el-text-color-secondary);
+  --admin-border: var(--el-border-color-light);
+  --admin-space-xs: 8px;
+  --admin-space-sm: 12px;
+  --admin-space-md: 16px;
+  --admin-space-lg: 24px;
+  --admin-space-xl: 32px;
+  --admin-radius: var(--el-border-radius-base);
+  --admin-sidebar-width: 208px;
+  --admin-font: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}

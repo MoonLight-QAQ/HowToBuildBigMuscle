@@ -1,0 +1,52 @@
+{
+  "name": "@pickaus/admin-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "gen:api": "openapi-typescript ../../docs/api/admin.openapi.yaml -o src/api/generated/admin.ts",
+    "lint": "eslint . --max-warnings 0 && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "build": "pnpm typecheck && vite build"
+  },
+  "dependencies": {
+    "axios": "1.21.0",
+    "element-plus": "2.14.7",
+    "pinia": "4.1.0",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "@vitejs/plugin-vue": "6.0.10",
+    "@vue/test-utils": "2.5.1",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-vue": "10.12.0",
+    "happy-dom": "21.0.4",
+    "msw": "3.0.3",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.10",
+    "sass": "1.107.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5",
+    "vue-tsc": "3.3.14"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}
