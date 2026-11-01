@@ -11,6 +11,16 @@ import '@/styles/index.scss'
 const app = createApp(App)
 
 app.use(createPinia())
+// TODO(W-01c)：在这里注册路由。
+//   import router from '@/router'
+//   app.use(router)
 app.use(ElementPlus, { locale: zhCn })
+
+// TODO(W-01b)：在挂载之前启动 MSW 模拟接口，保证第一个请求发出前模拟服务已就绪。
+// 必须用动态 import，生产构建中 VITE_USE_MOCK 为 'false'，MSW 不会被打包进去。
+//   if (import.meta.env.VITE_USE_MOCK === 'true') {
+//     const { worker } = await import('@/mocks/browser')
+//     await worker.start({ onUnhandledRequest: 'bypass' })
+//   }
 
 app.mount('#app')
