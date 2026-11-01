@@ -17,7 +17,7 @@ description: 提交 PR 前的自查清单。当用户说要提 PR、准备合并
 
 用 `git diff --stat origin/develop...HEAD` 查看本分支的全部改动，然后检查：
 
-- [ ] 所有改动都在任务清单中该任务的「范围」内
+- [ ] 所有改动都在任务 issue 的「范围」内（`gh issue view <编号>` 查看）
 - [ ] 没有修改 `docs/tasks/locked-paths.txt` 中的锁定目录。如有，确认用户已获得负责人同意
 - [ ] 如果修改了共享区域，已向用户说明，并需要在 PR 描述中单独列出
 - [ ] 没有修改其他工程（只改了一个工程目录，文档除外）
@@ -46,18 +46,20 @@ description: 提交 PR 前的自查清单。当用户说要提 PR、准备合并
 | --- | --- |
 | `frontend/web` | `pnpm lint && pnpm typecheck && pnpm test && pnpm build` |
 
-## 六、任务清单
+## 六、任务与锁定
 
-- [ ] 如果是该任务的第一个 PR：任务状态已改为「🚧 进行中」
-- [ ] 如果是该任务的最后一个 PR：状态已改为「✅ 已完成 🔒」，范围内的目录已加入 `locked-paths.txt`
-- [ ] 只修改了本任务那一行
+- [ ] 已确认本 PR 对应哪个任务 issue（编号）
+- [ ] 如果本 PR 完成了任务：issue「范围」中的目录已加入 `docs/tasks/locked-paths.txt`
+- [ ] 没有修改 `docs/tasks/` 下与本任务无关的内容
+
+任务的状态在 GitHub Project 看板上管理，**不需要、也不要**在文件里修改状态。
 
 ## 七、PR 信息
 
 全部检查通过后，为用户准备：
 
 1. **PR 标题**：`类型(范围): 中文描述`
-2. **PR 描述**：按 `.github/pull_request_template.md` 填写
+2. **PR 描述**：按 `.github/pull_request_template.md` 填写。「关联任务」一行：完成任务写 `Closes #<编号>`，只完成一部分写 `Refs #<编号>`
 3. **创建命令**：`gh pr create --base develop`
 
 **目标分支必须是 `develop`**，除非是发版或 hotfix。

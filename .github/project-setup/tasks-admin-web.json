@@ -1,0 +1,146 @@
+{
+  "phase": "admin-web",
+  "phaseName": "管理后台前端",
+  "tasks": [
+    {
+      "id": "W-00a", "title": "契约框架", "area": "contract", "assignee": "MoonLight-QAQ",
+      "depends": [], "estimateDays": 1, "start": "2026-11-02", "end": "2026-11-02",
+      "content": "搭建 docs/api/admin.openapi.yaml 的文件结构：通用响应和错误格式、分页、ID、金额、时间、图片、双语字段等公共定义，并为 A、B、C 三人各预留一个区块。",
+      "scope": ["docs/api/admin.openapi.yaml 中的公共部分"],
+      "refs": ["docs/api/conventions.md", "docs/design/admin-data-dictionary.md"]
+    },
+    {
+      "id": "W-00b", "title": "A 的模块接口：概览、订单、退款、举报", "area": "contract", "assignee": "RealninX",
+      "depends": ["W-00a"], "estimateDays": 2, "start": "2026-11-03", "end": "2026-11-04",
+      "content": "在契约中 A 的区块内，编写概览、订单、退款、举报的全部接口。",
+      "scope": ["docs/api/admin.openapi.yaml 中 A 的区块"],
+      "refs": ["docs/prd/admin-prd.md 第 4、5、6、6.1、15 节", "docs/design/admin-data-dictionary.md"]
+    },
+    {
+      "id": "W-00c", "title": "B 的模块接口：城市、商城类目、商品、配送、图片上传", "area": "contract", "assignee": "MoonLight-QAQ",
+      "depends": ["W-00a"], "estimateDays": 2, "start": "2026-11-04", "end": "2026-11-05",
+      "content": "在契约中 B 的区块内，编写城市、商城类目、商品、配送、图片上传的全部接口。",
+      "scope": ["docs/api/admin.openapi.yaml 中 B 的区块"],
+      "refs": ["docs/prd/admin-prd.md 第 7～11 节", "docs/design/admin-data-dictionary.md"]
+    },
+    {
+      "id": "W-00d", "title": "C 的模块接口：登录、闲置类目、闲置", "area": "contract", "assignee": "Yue0131",
+      "depends": ["W-00a"], "estimateDays": 2, "start": "2026-11-03", "end": "2026-11-04",
+      "content": "在契约中 C 的区块内，编写登录、闲置类目、闲置的全部接口。",
+      "scope": ["docs/api/admin.openapi.yaml 中 C 的区块"],
+      "refs": ["docs/prd/admin-prd.md 第 3、12、13、14 节", "docs/design/admin-data-dictionary.md"]
+    },
+    {
+      "id": "W-01a", "title": "工程初始化", "area": "skeleton", "assignee": "MoonLight-QAQ",
+      "depends": ["W-00a"], "estimateDays": 1, "start": "2026-11-03", "end": "2026-11-03",
+      "content": "初始化 frontend/web 工程：依赖、构建、lint、测试、类型检查等配置；应用入口；全局样式；.node-version 文件。",
+      "scope": ["frontend/web 根目录下的配置文件", "frontend/web/src/main.ts", "frontend/web/src/App.vue", "frontend/web/src/styles/"],
+      "refs": ["frontend/web/AGENTS.md"]
+    },
+    {
+      "id": "W-01b", "title": "请求与模拟", "area": "skeleton", "assignee": "RealninX",
+      "depends": ["W-01a"], "estimateDays": 2, "start": "2026-11-05", "end": "2026-11-06",
+      "content": "请求封装、从契约生成类型（pnpm gen:api）、MSW 模拟接口的基础设施、错误码常量。",
+      "scope": ["frontend/web/src/api/http.ts", "frontend/web/src/api/generated/", "frontend/web/src/mocks/browser.ts", "frontend/web/src/mocks/handlers/index.ts", "frontend/web/src/constants/", "frontend/web/src/types/"],
+      "refs": ["frontend/web/AGENTS.md 的「接口调用」一节", "docs/api/conventions.md"]
+    },
+    {
+      "id": "W-01c", "title": "路由、布局与登录状态", "area": "skeleton", "assignee": "Yue0131",
+      "depends": ["W-01a"], "estimateDays": 2, "start": "2026-11-05", "end": "2026-11-06",
+      "content": "路由表框架、登录守卫、后台布局（左侧导航加内容区）、登录信息存储。",
+      "scope": ["frontend/web/src/router/", "frontend/web/src/layouts/", "frontend/web/src/stores/"],
+      "refs": ["frontend/web/AGENTS.md 的「页面与路由」一节", "docs/prototype/admin/"]
+    },
+    {
+      "id": "W-01d", "title": "通用组件与工具", "area": "skeleton", "assignee": "RealninX",
+      "depends": ["W-01a"], "estimateDays": 2, "start": "2026-11-09", "end": "2026-11-10",
+      "content": "中英文双输入框组件、金额和时间格式化、本地存储封装、列表的组合式函数，以及它们的单元测试。",
+      "scope": ["frontend/web/src/components/", "frontend/web/src/composables/", "frontend/web/src/utils/"],
+      "refs": ["frontend/web/AGENTS.md 的「数据显示与输入」一节"]
+    },
+    {
+      "id": "W-01e", "title": "CI 流水线", "area": "skeleton", "assignee": null,
+      "depends": ["W-01a"], "estimateDays": 2, "start": "2026-11-04", "end": "2026-11-05",
+      "content": "前端检查（lint、类型检查、测试、构建）、PR 来源分支检查（main 只接收 develop 和 hotfix）、锁定目录检查、Dependabot 依赖更新配置。完成后在 .github/repo-settings 中把这些检查设为合并前必须通过。",
+      "scope": [".github/workflows/", ".github/dependabot.yml", ".github/repo-settings/"],
+      "refs": ["docs/adr/0002-branch-strategy.md", "docs/tasks/README.md 的「锁定」一节"]
+    },
+    {
+      "id": "W-02", "title": "城市（示例模块）", "area": "module", "assignee": "MoonLight-QAQ",
+      "depends": ["W-01b", "W-01c", "W-01d"], "estimateDays": 2, "start": "2026-11-11", "end": "2026-11-12",
+      "content": "城市的列表、新增、编辑。这是示例模块，其他人照着它的写法开发，写法要规范、完整。",
+      "scope": ["frontend/web/src/views/city/", "frontend/web/src/api/city.ts", "frontend/web/src/mocks/handlers/city.ts", "frontend/web/src/mocks/data/city.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 11 节", "docs/prototype/admin/"]
+    },
+    {
+      "id": "W-03", "title": "登录", "area": "module", "assignee": "Yue0131",
+      "depends": ["W-01b", "W-01c", "W-01d"], "estimateDays": 1, "start": "2026-11-09", "end": "2026-11-09",
+      "content": "登录页面，以及与登录守卫的对接。",
+      "scope": ["frontend/web/src/views/login/", "frontend/web/src/api/auth.ts", "frontend/web/src/mocks/handlers/auth.ts", "frontend/web/src/mocks/data/auth.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 3 节"]
+    },
+    {
+      "id": "W-04", "title": "商城类目", "area": "module", "assignee": "MoonLight-QAQ",
+      "depends": ["W-02"], "estimateDays": 1, "start": "2026-11-13", "end": "2026-11-13",
+      "content": "商城类目的列表、新增、删除。",
+      "scope": ["frontend/web/src/views/mall-category/", "frontend/web/src/api/mall-category.ts", "frontend/web/src/mocks/handlers/mall-category.ts", "frontend/web/src/mocks/data/mall-category.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 9 节"]
+    },
+    {
+      "id": "W-05", "title": "商品（列表、新增、编辑、入库）", "area": "module", "assignee": "MoonLight-QAQ",
+      "depends": ["W-04"], "estimateDays": 3, "start": "2026-11-19", "end": "2026-11-23",
+      "content": "商品列表（账面、锁定、可售三个数）、新增、编辑、入库。",
+      "scope": ["frontend/web/src/views/product/", "frontend/web/src/api/product.ts", "frontend/web/src/mocks/handlers/product.ts", "frontend/web/src/mocks/data/product.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 7、8 节"]
+    },
+    {
+      "id": "W-06", "title": "配送（费用、时段、区与 suburb）", "area": "module", "assignee": "MoonLight-QAQ",
+      "depends": ["W-02"], "estimateDays": 3, "start": "2026-11-16", "end": "2026-11-18",
+      "content": "线下配送费、快递邮费、包邮门槛、送达时段、各城市的区与 suburb。",
+      "scope": ["frontend/web/src/views/delivery/", "frontend/web/src/api/delivery.ts", "frontend/web/src/mocks/handlers/delivery.ts", "frontend/web/src/mocks/data/delivery.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 10 节"]
+    },
+    {
+      "id": "W-07", "title": "闲置类目", "area": "module", "assignee": "Yue0131",
+      "depends": ["W-02"], "estimateDays": 1, "start": "2026-11-13", "end": "2026-11-13",
+      "content": "闲置类目的列表、新增、删除。",
+      "scope": ["frontend/web/src/views/flea-category/", "frontend/web/src/api/flea-category.ts", "frontend/web/src/mocks/handlers/flea-category.ts", "frontend/web/src/mocks/data/flea-category.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 14 节"]
+    },
+    {
+      "id": "W-08", "title": "闲置（封面墙、详情、已浏览、强制下架）", "area": "module", "assignee": "Yue0131",
+      "depends": ["W-07"], "estimateDays": 3, "start": "2026-11-16", "end": "2026-11-18",
+      "content": "闲置封面墙、帖子详情、已浏览标记、强制下架。",
+      "scope": ["frontend/web/src/views/listing/", "frontend/web/src/api/listing.ts", "frontend/web/src/mocks/handlers/listing.ts", "frontend/web/src/mocks/data/listing.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 12、13 节"]
+    },
+    {
+      "id": "W-09", "title": "举报（列表、忽略、下架）", "area": "module", "assignee": "RealninX",
+      "depends": ["W-08"], "estimateDays": 2, "start": "2026-11-24", "end": "2026-11-25",
+      "content": "举报列表、忽略、下架。下架时调用闲置模块的强制下架规则。",
+      "scope": ["frontend/web/src/views/report/", "frontend/web/src/api/report.ts", "frontend/web/src/mocks/handlers/report.ts", "frontend/web/src/mocks/data/report.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 15 节"]
+    },
+    {
+      "id": "W-10", "title": "订单（列表、详情、开始配送、标记送达）", "area": "module", "assignee": "RealninX",
+      "depends": ["W-02"], "estimateDays": 3, "start": "2026-11-13", "end": "2026-11-17",
+      "content": "订单列表、订单详情、开始配送、标记已送达。",
+      "scope": ["frontend/web/src/views/order/", "frontend/web/src/api/order.ts", "frontend/web/src/mocks/handlers/order.ts", "frontend/web/src/mocks/data/order.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 5、6 节"]
+    },
+    {
+      "id": "W-11", "title": "退款（列表、详情、同意、拒绝）", "area": "module", "assignee": "RealninX",
+      "depends": ["W-10"], "estimateDays": 3, "start": "2026-11-18", "end": "2026-11-20",
+      "content": "退款列表、退款单详情、同意、拒绝。",
+      "scope": ["frontend/web/src/views/refund/", "frontend/web/src/api/refund.ts", "frontend/web/src/mocks/handlers/refund.ts", "frontend/web/src/mocks/data/refund.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 6.1 节"]
+    },
+    {
+      "id": "W-12", "title": "概览", "area": "module", "assignee": "RealninX",
+      "depends": ["W-10", "W-11"], "estimateDays": 1, "start": "2026-11-23", "end": "2026-11-23",
+      "content": "概览页：四个待办数字和配送概况。",
+      "scope": ["frontend/web/src/views/dashboard/", "frontend/web/src/api/dashboard.ts", "frontend/web/src/mocks/handlers/dashboard.ts", "frontend/web/src/mocks/data/dashboard.ts"],
+      "refs": ["docs/prd/admin-prd.md 第 4 节"]
+    }
+  ]
+}

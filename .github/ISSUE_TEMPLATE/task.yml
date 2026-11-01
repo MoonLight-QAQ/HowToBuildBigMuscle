@@ -1,0 +1,52 @@
+name: 开发任务
+description: 新增一个开发任务。提交后会自动加入 GitHub Project 看板。
+title: "[任务ID] 任务名称"
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        标题格式为 `[任务ID] 任务名称`，例如 `[W-13] 优惠提示`。任务 ID 的前缀见 `docs/tasks/README.md`。
+        提交后，请在看板上填写开始日期、截止日期和估算天数，并把这个任务补充进对应的任务清单（如 `docs/tasks/admin-web.md`）。
+  - type: textarea
+    id: content
+    attributes:
+      label: 任务内容
+      description: 要做什么，做到什么程度。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      description: 这个任务允许修改的文件和目录，每行一个。完成后会被加入锁定目录。
+      placeholder: |
+        - `frontend/web/src/views/xxx/`
+        - `frontend/web/src/api/xxx.ts`
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: 依赖
+      description: 开始前需要先完成的任务 ID，没有就填「无」。
+      placeholder: W-02
+    validations:
+      required: true
+  - type: textarea
+    id: refs
+    attributes:
+      label: 参考
+      description: 相关的 PRD 章节、原型页面、设计文档。
+      placeholder: |
+        - docs/prd/admin-prd.md 第 X 节
+  - type: checkboxes
+    id: done
+    attributes:
+      label: 完成标准
+      options:
+        - label: 功能符合 PRD 和原型
+        - label: 遵守根目录和对应工程的 AGENTS.md
+        - label: 对应工程的 lint、类型检查、测试、构建全部通过
+        - label: 完成任务的 PR 中，把范围内的目录加入 docs/tasks/locked-paths.txt
+        - label: PR 描述里写上 Closes #本 issue 编号

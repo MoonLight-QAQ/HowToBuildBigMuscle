@@ -8,9 +8,9 @@
 # 他修改自己的模块时，就没有人能完成负责人审查。
 #
 # 成员：
-#   A = @RealninX       订单、退款、概览
+#   A = @RealninX       订单、退款、概览、举报
 #   B = @MoonLight-QAQ  商品、商城类目、配送、城市
-#   C = @Yue0131        闲置、闲置类目、举报、登录
+#   C = @Yue0131        闲置、闲置类目、登录
 #   工程骨架、共享区域、仓库配置、文档：三人共同负责，除作者外任意一人审查即可
 
 # ---------- 默认：仓库内其他所有文件 ----------
@@ -51,6 +51,11 @@
 /frontend/web/src/mocks/handlers/refund.ts  @RealninX @MoonLight-QAQ
 /frontend/web/src/mocks/data/refund.ts      @RealninX @MoonLight-QAQ
 
+/frontend/web/src/views/report/             @RealninX @MoonLight-QAQ
+/frontend/web/src/api/report.ts             @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/handlers/report.ts  @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/data/report.ts      @RealninX @MoonLight-QAQ
+
 # ---------- 管理后台前端：B 的模块 ----------
 /frontend/web/src/views/city/               @MoonLight-QAQ @Yue0131
 /frontend/web/src/api/city.ts               @MoonLight-QAQ @Yue0131
@@ -87,11 +92,6 @@
 /frontend/web/src/api/listing.ts            @Yue0131 @RealninX
 /frontend/web/src/mocks/handlers/listing.ts @Yue0131 @RealninX
 /frontend/web/src/mocks/data/listing.ts     @Yue0131 @RealninX
-
-/frontend/web/src/views/report/             @Yue0131 @RealninX
-/frontend/web/src/api/report.ts             @Yue0131 @RealninX
-/frontend/web/src/mocks/handlers/report.ts  @Yue0131 @RealninX
-/frontend/web/src/mocks/data/report.ts      @Yue0131 @RealninX
 
 # ---------- 尚未开工的工程（开工时再细分） ----------
 /frontend/mini/                             @MoonLight-QAQ @Yue0131 @RealninX
