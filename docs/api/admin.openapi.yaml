@@ -102,6 +102,41 @@
 #       $ref: '#/components/responses/Conflict'
 #       description: NAME_DUPLICATED（名称与已有城市重复）
 #
+# 【所有字段都写进 required】响应中的字段始终出现，没有值时为 null，不能省略。
+# 所以响应结构的每个字段都要列进 required，可以为 null 的字段也一样。
+# 漏写会让生成的类型变成可选字段（field?: X），前端要多处理 undefined。
+#
+# 【可以为 null 的字段】OpenAPI 3.1 没有 nullable，按下面两种情况写：
+#
+#   引用公共类型或其他 schema 时，用 anyOf：
+#     completedAt:
+#       anyOf:
+#         - $ref: '#/components/schemas/DateTime'
+#         - type: 'null'
+#
+#   普通类型直接写成类型数组：
+#     slotNameZh:
+#       type: [string, 'null']
+#       maxLength: 20
+#
+# 【双语字段】中英文各一个字段，后缀为 Zh 和 En。两个都要写进 required，
+# 长度上限各自按字段清单写（英文一般是中文的两倍），新增和编辑时两个都必填：
+#
+#   City:
+#     type: object
+#     required: [id, nameZh, nameEn]
+#     properties:
+#       id:
+#         $ref: '#/components/schemas/Id'
+#       nameZh:
+#         type: string
+#         minLength: 1
+#         maxLength: 20
+#       nameEn:
+#         type: string
+#         minLength: 1
+#         maxLength: 40
+#
 # 【路径中的 ID】引用 IdPath：
 #
 #   /cities/{id}:
