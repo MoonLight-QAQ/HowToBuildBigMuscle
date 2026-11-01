@@ -1,0 +1,31 @@
+// 全局样式入口，在 main.ts 中导入，排在 Element Plus 样式之后。
+// 需要覆盖 Element Plus 组件内部样式时，写在本目录下，并加注释说明原因。
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Hiragino Sans GB',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-size: $font-size-base;
+  color: $text-primary;
+  background-color: $bg-page;
+  -webkit-font-smoothing: antialiased;
+}
