@@ -2,6 +2,8 @@
 
 2026-11-01 用户最终范围：订单、退款、概览、举报。参考团队[任务表](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/blob/5b4395f/docs/tasks/admin-web.md)；举报依用户最新指令纳入RealninX。此清单记录个人推进，不覆盖团队的整张任务表。
 
+用户确认技术栈：管理后台为 Vue 3 + Pinia，后端为 Go。Pinia 用于跨页面状态；页面自己的列表、筛选和表单状态不集中进 store。当前先完成管理后台前端，Go 实现另按后端阶段任务推进。
+
 | Story | 本次范围 | 分支 | 状态 |
 |---|---|---|---|
 | W-00b | 订单、退款、概览、举报的契约草案与生成类型 | `feat/docs-realnin-admin-contract` | 本地契约验证通过，待 PR 审查 |
