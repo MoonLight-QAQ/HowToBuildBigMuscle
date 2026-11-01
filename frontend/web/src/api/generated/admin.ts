@@ -69,7 +69,7 @@ export interface paths {
         };
         /**
          * 查看订单详情
-         * @description 返回下单时商品/金额/地址快照及退款单跳转信息。线下含日期和时段；快递日期/时段为 null。待支付不得代付或标完成。
+         * @description 返回下单时商品/金额/地址快照及退款单跳转信息。线下含日期和时段；快递日期/时段为 null。待支付不得代付或标完成。 仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
          */
         get: operations["getOrder"];
         put?: never;
@@ -91,7 +91,7 @@ export interface paths {
         put?: never;
         /**
          * 开始配送或标记已寄出
-         * @description 仅 pending→delivering；线下称开始配送，快递称标记已寄出。按 id+version+旧状态原子检查并写入，成功后 version 递增，返回最新订单；重复/过期提交拒绝，不静默成功。
+         * @description 仅 pending→delivering；线下称开始配送，快递称标记已寄出。按 id+version+旧状态原子检查并写入，成功后 version 递增，返回最新订单；重复/过期提交拒绝，不静默成功。 仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。 任何状态写入前同时校验动作权限及配送资料查看权限；返回403时订单状态和版本均不改变。
          */
         post: operations["startOrderDelivery"];
         delete?: never;
@@ -111,7 +111,7 @@ export interface paths {
         put?: never;
         /**
          * 标记已送达
-         * @description 允许 pending 或 delivering→done，包括从待配送直接送达。服务端记录 completedBy=staff、completedAt=当前UTC并递增版本。unpaid/refunding/refunded/cancelled/done 均不允许。24小时自动完成由服务端任务处理，不提供模拟时钟按钮。
+         * @description 允许 pending 或 delivering→done，包括从待配送直接送达。服务端记录 completedBy=staff、completedAt=当前UTC并递增版本。unpaid/refunding/refunded/cancelled/done 均不允许。24小时自动完成由服务端任务处理，不提供模拟时钟按钮。 仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。 任何状态写入前同时校验动作权限及配送资料查看权限；返回403时订单状态和版本均不改变。
          */
         post: operations["arriveOrder"];
         delete?: never;
@@ -457,7 +457,7 @@ export interface components {
             version: components["schemas"]["Version"];
         };
         /**
-         * @description 订单详情快照。只返回本订单履约所需信息，不返回闲置卖家联系方式；受管理员鉴权与服务端权限控制。
+         * @description 订单详情快照，仅返回本订单履约所需信息，不返回闲置卖家联系方式。仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
          * @example {
          *       "id": "9000000000000000010",
          *       "orderNo": "MOCK-ORDER-001",
@@ -475,7 +475,7 @@ export interface components {
          *       "createdAt": "2026-11-01T00:00:00Z",
          *       "version": 0,
          *       "contactName": "演示收货人",
-         *       "contactPhoneMasked": "MOCK-不可拨打",
+         *       "contactPhone": "0491 570 006",
          *       "address": {
          *         "formatted": "演示地址，请勿配送",
          *         "street": "示例街道",
@@ -521,8 +521,8 @@ export interface components {
             createdAt: components["schemas"]["DateTime"];
             version: components["schemas"]["Version"];
             contactName: string;
-            /** @description 暂沿用脱敏投影，等待用户对配送电话与架构隐私冲突的确认；不得放真实联系方式作为示例。 */
-            contactPhoneMasked: string | null;
+            /** @description 收货人完整联系电话快照。2026-11-02用户确认：仅有配送资料查看权限的管理员可读取；仅用于履约，不返回到列表、用户简表、退款或举报投影。示例使用ACMA预留虚构号码。 */
+            contactPhone: string;
             address: components["schemas"]["AddressSnapshot"];
             /** @description 城市当地送达日期；快递订单为 null。 */
             deliveryDate: components["schemas"]["LocalDate"] | null;
@@ -1183,7 +1183,7 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             /** @description NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。 */
             401: components["responses"]["NeedLogin"];
-            /** @description FORBIDDEN：已登录但没有此操作权限。 */
+            /** @description FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。 */
             403: components["responses"]["Forbidden"];
             /** @description NOT_FOUND：目标记录不存在或已逻辑删除。 */
             404: components["responses"]["NotFound"];
@@ -1222,7 +1222,7 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             /** @description NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。 */
             401: components["responses"]["NeedLogin"];
-            /** @description FORBIDDEN：已登录但没有此操作权限。 */
+            /** @description FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。 所有权限检查在状态写入前完成，403不改变订单状态或版本。 */
             403: components["responses"]["Forbidden"];
             /** @description NOT_FOUND：目标记录不存在或已逻辑删除。 */
             404: components["responses"]["NotFound"];
@@ -1263,7 +1263,7 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             /** @description NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。 */
             401: components["responses"]["NeedLogin"];
-            /** @description FORBIDDEN：已登录但没有此操作权限。 */
+            /** @description FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。 所有权限检查在状态写入前完成，403不改变订单状态或版本。 */
             403: components["responses"]["Forbidden"];
             /** @description NOT_FOUND：目标记录不存在或已逻辑删除。 */
             404: components["responses"]["NotFound"];

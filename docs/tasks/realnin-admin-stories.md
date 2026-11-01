@@ -20,4 +20,4 @@
 
 开始开发前读取对应 Issue 的范围、依赖和验收标准。实际进度、验证记录和 PR 链接写在该 Issue 中，不在本文件维护第二套状态。看板状态、日期、负责人由人操作；不由 AI 提前关闭 Issue 或标记 Done。
 
-当前契约草案 PR 为 [#13](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/pull/13)，以 `Refs #17` 关联部分成果。旧 [#12](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/12)保留关联说明，不再分别维护 W-00b 进度。完成整个任务的 PR 再写 `Closes #<编号>` 并锁定对应范围；Mock 成功不作为真实支付、库存或上线证据。
+本 Story 的契约 PR 为 [#13](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/pull/13)，对应任务 [#17](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/17)。旧 [#12](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/12)保留关联说明，不再分别维护 W-00b 进度。完成整个任务的 PR 按模板声明关联任务，合并后由自动化关闭；共享文件锁定遵循 ADR 0004 中的用户确认与 PR #37 约定。Mock 成功不作为真实支付、库存或上线证据。
