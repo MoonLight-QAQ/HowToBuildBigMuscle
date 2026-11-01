@@ -13,6 +13,8 @@
 用法（在仓库根目录执行）：
   python3 .github/project-setup/setup_project.py            # 正式执行
   python3 .github/project-setup/setup_project.py --dry-run  # 只打印要做什么，不做任何修改
+  python3 .github/project-setup/setup_project.py --refill W-00a,W-00b
+      # 为指定的已有任务重新填写状态、日期和估算（用于补救上次中途失败时漏填的任务）
 
 可以重复执行：
   - 已经存在的标签、看板、字段、issue，不会重复创建
@@ -61,6 +63,20 @@ AREA_NAMES = {"contract": "接口契约", "skeleton": "工程骨架", "module": 
 DRY_RUN = "--dry-run" in sys.argv
 
 
+def parse_refill():
+    """读取 --refill 参数，返回需要重新填写字段的任务 ID 集合。"""
+    if "--refill" not in sys.argv:
+        return set()
+    index = sys.argv.index("--refill")
+    if index + 1 >= len(sys.argv):
+        print("❌ --refill 后面需要跟任务 ID，用逗号分隔，例如：--refill W-00a,W-00b")
+        sys.exit(1)
+    return {item.strip() for item in sys.argv[index + 1].split(",") if item.strip()}
+
+
+REFILL_IDS = parse_refill()
+
+
 # ============================================================
 # 工具函数
 # ============================================================
@@ -98,7 +114,7 @@ def gh_json(*args, mutates=False):
 # ============================================================
 
 def check_auth() -> None:
-    log("\n[1/6] 检查 GitHub CLI 的登录状态和权限")
+    log("\n[1/6] 检查 GitHub CLI 的登录状态、权限，以及负责人能否被分配")
     result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
     status = result.stdout + result.stderr
     if result.returncode != 0:
@@ -109,6 +125,24 @@ def check_auth() -> None:
         log("   gh auth refresh -s project")
         sys.exit(1)
     log("  ✓ 已登录，且有 Project 权限")
+
+    # 提前检查每位负责人能否被分配到本仓库的 issue。
+    # 在创建任何 issue 之前检查，避免执行到一半才失败。
+    tasks = json.loads(TASK_FILE.read_text(encoding="utf-8"))["tasks"]
+    assignees = sorted({t["assignee"] for t in tasks if t["assignee"]})
+    not_assignable = []
+    for login in assignees:
+        check = subprocess.run(["gh", "api", f"repos/{REPO}/assignees/{login}", "--silent"],
+                               capture_output=True, text=True)
+        if check.returncode == 0:
+            log(f"  ✓ 可以分配任务给 @{login}")
+        else:
+            not_assignable.append(login)
+    if not_assignable:
+        log("\n❌ 以下成员还不能被分配任务：" + "、".join("@" + x for x in not_assignable))
+        log("   通常是因为对方还不是仓库的协作者，或者还没有接受协作邀请。")
+        log("   处理方法见 .github/project-setup/README.md 的「常见问题」。处理好后重新运行本脚本。")
+        sys.exit(1)
 
 
 # ============================================================
@@ -257,7 +291,7 @@ def set_item_fields(project: dict, fields: dict, item_id: str, task: dict) -> No
 
 
 def ensure_issues(project: dict, fields: dict) -> list:
-    log("\n[5/6] 创建任务 issue 并加入看板")
+    log("\n[5/6] 创建任务 issue，加入看板，并填写状态、日期和估算")
     tasks = json.loads(TASK_FILE.read_text(encoding="utf-8"))["tasks"]
     existing = find_existing_issues() if not DRY_RUN else {}
     results = []
@@ -284,17 +318,20 @@ def ensure_issues(project: dict, fields: dict) -> list:
                            "--url", url, "--format", "json", mutates=True)
             item_id = item.get("id")
 
+        # 新任务，或用 --refill 指定的任务：立即填写状态、日期和估算。
+        # 每个任务创建后马上填写，这样即使脚本中途失败，已创建的任务也不会缺字段。
+        should_fill = is_new or task["id"] in REFILL_IDS
+        if should_fill and item_id:
+            set_item_fields(project, fields, item_id, task)
+            log(f"      已填写：{INITIAL_STATUS}，{task['start']} 至 {task['end']}，估算 {task['estimateDays']} 天")
+        elif should_fill and DRY_RUN:
+            log(f"    [dry-run] 将填写：{INITIAL_STATUS}，{task['start']} 至 {task['end']}")
+
         results.append((task, url, item_id, is_new))
 
-    log("\n[6/6] 填写新任务的状态、日期和估算")
-    for task, url, item_id, is_new in results:
-        if is_new and item_id:
-            set_item_fields(project, fields, item_id, task)
-            log(f"  ✓ {task['id']}：{INITIAL_STATUS}，{task['start']} 至 {task['end']}")
-        elif DRY_RUN:
-            log(f"    [dry-run] 将设置 {task['id']}：{INITIAL_STATUS}，{task['start']} 至 {task['end']}")
-    if not any(is_new for *_, is_new in results) and not DRY_RUN:
-        log("  · 没有新任务，已有任务的状态和日期保持不变")
+    unknown = REFILL_IDS - {t["id"] for t in tasks}
+    if unknown:
+        log("  ! --refill 中这些任务 ID 不存在，已忽略：" + "、".join(sorted(unknown)))
 
     return results
 
@@ -314,6 +351,9 @@ def main() -> None:
     project = ensure_project()
     fields = ensure_fields(project)
     results = ensure_issues(project, fields)
+    log("\n[6/6] 检查结果")
+    created = sum(1 for *_, is_new in results if is_new)
+    log(f"  ✓ 本次新建 {created} 个任务，跳过已存在的 {len(results) - created} 个")
 
     log("\n" + "=" * 60)
     log("  完成")

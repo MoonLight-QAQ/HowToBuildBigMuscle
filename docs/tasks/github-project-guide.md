@@ -114,7 +114,7 @@ python3 .github/project-setup/setup_project.py
 
 1. 打开看板，点右上角的 **⋯** → **Settings**。
 2. 左侧点 **Manage access**。
-3. 点 **Invite collaborators**，依次搜索并添加 `RealninX` 和 `Yue0131`，权限选 **Write**。
+3. 点 **Invite collaborators**，依次搜索并添加 `RealninX` 和 `celine-hy`，权限选 **Write**。
 
 在同一个 Settings 页面，**Visibility** 选 **Private**。仓库是公开的，但任务看板没必要公开。
 
@@ -174,7 +174,7 @@ python3 .github/project-setup/setup_project.py
 - 看板的「看板」视图中，`Todo` 一列有 20 张卡片。
 - 「路线图」视图中，每个任务都显示为一条横条。
 - 仓库页面顶部的 **Projects** 标签里，能看到这个看板。
-- 请 RealninX 和 Yue0131 打开看板地址，确认能够访问。
+- 请 RealninX 和 celine-hy 打开看板地址，确认能够访问。
 
 ---
 
