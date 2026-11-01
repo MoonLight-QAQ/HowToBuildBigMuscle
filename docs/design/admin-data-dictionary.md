@@ -43,7 +43,7 @@
 | `pending` | 待配送 | 已支付。快递订单表示还没寄出 |
 | `delivering` | 配送中 | 店员已开始配送。快递订单表示已寄出 |
 | `done` | 已完成 | 已送达或已确认收货 |
-| `refunding` | 退款中 | 申请退掉全部剩余商品，等待审核 |
+| `refunding` | 退款中 | 全部剩余商品的退款申请待处理，包含等待审核、审核同意但渠道结果尚未终结 |
 | `refunded` | 已退款 | 商品全部退完 |
 | `cancelled` | 已取消 | 未支付就关闭，没有发生扣款 |
 
@@ -72,16 +72,21 @@
 | `approved` | 已同意 |
 | `rejected` | 已拒绝 |
 
-### RefundPayoutStatus 微信退款进度【建议】
+### ProviderRefundStatus 渠道退款进度
 
-微信退款是异步的，发起后要等结果。这个字段和 `RefundStatus` 分开，用来显示钱实际退到了哪一步。
+2026-11-02 对齐用户已确认及 W-00b 评审认可的渠道中性设计。审核状态 `RefundStatus` 与渠道退款进度独立；实际渠道尚未确定，本轮先做可替换 Mock，不据此确定 Stripe、微信或其他支付供应商。
 
 | 值 | 名称 |
 | --- | --- |
-| `none` | 未发起 |
-| `processing` | 退款处理中 |
-| `success` | 已退回 |
+| `pending` | 退款处理中 |
+| `requires_action` | 待补充处理 |
+| `succeeded` | 退款成功（渠道确认） |
 | `failed` | 退款失败 |
+| `canceled` | 退款已取消 |
+
+这五个值参考 [Stripe Refund 对象](https://docs.stripe.com/api/refunds/object)，不含 `none`。尚未发起时 `providerRefundId` 与 `providerRefundStatus` 均为 `null`；对象已存在但状态尚未同步时，状态为 `null`，显示待确认，不能显示未发起。`succeeded` 表示渠道结果，不能写成前端已核验顾客银行到账；点击同意或请求受理也不推导成功。[退款处理说明](https://docs.stripe.com/refunds)
+
+字段统一使用 `provider`、`providerRefundId`、`providerRefundStatus`，取代旧的 `wechatRefundNo` 和 `payoutStatus`。Stripe 的 [Payout 对象](https://docs.stripe.com/api/payouts/object) 是商户向银行或借记卡出款，与顾客退款不同。未来接入真实渠道时须维护权威状态及适配映射，不把不同平台的原始枚举混用；本节是退款字段的统一人工说明来源。
 
 ### RefundReason 退款原因
 
@@ -365,8 +370,10 @@ RefundBrief：`{ id, refundNo, status }`。
 | `orderId` | id | 小程序 | |
 | `orderNo` | string | 计算 | |
 | `user` | UserBrief | 小程序 | |
-| `status` | enum RefundStatus | 小程序 / 后台 | |
-| `payoutStatus` | enum RefundPayoutStatus | 计算 | 微信退款进度【建议】 |
+| `status` | enum RefundStatus | 小程序 / 后台 | 审核状态。`approved` 只表示审核同意，不表示渠道成功或银行到账 |
+| `provider` | string(32)? | 计算 | 渠道适配标识；未选择或未知为 `null`。Mock可用 `mock`，不代表已确定真实供应商 |
+| `providerRefundId` | string(100)? | 计算 | 渠道退款对象标识，尚未创建为 `null` |
+| `providerRefundStatus` | enum ProviderRefundStatus? | 计算 | 独立渠道进度；五枚举及 `null` 含义见前文 |
 | `reason` | enum RefundReason | 小程序 | |
 | `extra` | string(200)? | 小程序 | 补充说明 |
 | `items` | RefundItem[] | 小程序 | 退哪些商品、各几件 |
@@ -375,10 +382,10 @@ RefundBrief：`{ id, refundNo, status }`。
 | `totalAmountCents` | cents | 计算 | 合计 |
 | `orderStatusBeforeApply` | enum OrderStatus? | 小程序 | 申请前的订单状态，拒绝整单退款时据此恢复 |
 | `autoApproved` | bool | 小程序 | 待配送时用户自己退的，自动同意 |
-| `wechatRefundNo` | string? | 计算 | 微信退款单号 |
 | `reviewedBy` | string? | 后台 | 审核人账号 |
 | `reviewedAt` | datetime? | 后台 | |
 | `createdAt` | datetime | 小程序 | |
+| `version` | int | 计算 | 非负版本，允许初值0；写操作提交读取的版本和允许的旧状态，成功递增，冲突拒绝 |
 
 RefundItem：`{ orderItemId, nameZh, priceCents, qty, amountCents }`。
 
@@ -386,10 +393,12 @@ RefundItem：`{ orderItemId, nameZh, priceCents, qty, amountCents }`。
 
 | 操作 | 允许的当前状态 | 结果 |
 | --- | --- | --- |
-| 同意 | `open` | 向微信发起退款。退款成功后变为 `approved`，增加订单商品的已退数量；商品全部退完时，订单变为 `refunded`。**账面库存不变** |
+| 同意 | `open` | 审核成功后变为 `approved`，渠道可仍为 `pending`。审核或受理不增加已退数量；只有渠道成功结果可靠同步后幂等入账，商品全部退完才将订单变为 `refunded`。**账面库存不变** |
 | 拒绝 | `open` | 变为 `rejected`。整单退款的，订单恢复到申请前的状态；部分退款的，订单状态不变 |
 
-微信退款失败时，退款单保持 `open`，返回 `REFUND_PAYOUT_FAILED`。
+渠道失败或取消记录在独立进度中，不把已同意单自动退回 `open`，也不增加已退件数。拒绝只针对待审单；部分退款的订单保持原履约状态。真正的渠道发起、失败重试和终态修复在供应商接入时确定，本轮不增加重试接口或执行真实退款。
+
+待审、已同意但渠道结果未定（含 `pending`、`requires_action` 或未知）的申请仍占用对应可退件数和运费额度，不能因审核状态离开 `open` 而释放。发起和结算均检查剩余可退额度；成功按渠道退款标识幂等入账，可靠确认失败/取消终止后再按规则释放。合计金额等于商品退款金额加运费退款，累计已退加未终结占用不得超过原购买量/快照运费。本节描述后续 Mock/Go 必须实现的不变量，不代表已完成支付或并发集成测试。
 
 ---
 
@@ -501,7 +510,7 @@ CommentBrief：`{ id, content, deleted }`。
 | 事项 | 说明 |
 | --- | --- |
 | 区的匹配方式 | 是否采用 `suburbs` 字段，按 suburb 或邮编判断地址属于哪个区 |
-| 微信退款进度 | 是否在退款单上增加 `payoutStatus`，向店员展示「退款处理中」 |
+| 真实退款渠道与适配 | 独立 `providerRefundStatus` 已确认；供应商选择、权威状态映射及失败重试在真实接入阶段确定 |
 | 类目能否改名 | PRD 只写了新增和删除 |
 | 城市能否删除 | PRD 只写了新增和修改 |
 | 各字段的长度上限 | PRD 只规定了部分字段，其余为建议值 |

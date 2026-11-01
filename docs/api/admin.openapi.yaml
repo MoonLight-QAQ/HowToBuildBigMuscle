@@ -198,9 +198,975 @@ tags:
 # 目前还没有任何接口，paths 写成空对象 {}，保证文件合法。
 # 第一个在 paths 中添加接口的人：把下一行末尾的「 {}」删掉，只保留「paths:」。
 # 注意：不要在 paths 下放任何 x- 开头的字段，生成类型时会被当成一个接口路径。
-paths: {}
+paths:
 
   # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
+
+  /summary:
+    get:
+      operationId: getSummary
+      tags:
+        - dashboard
+      summary: 查看概览
+      description: 四项计数由服务端按当前状态现算。仅提供跳转和只读配送摘要，不执行配送或审核，不写死数字。
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Summary"
+              examples:
+                current:
+                  summary: 四项待办和只读配置
+                  value:
+                    ok: true
+                    data:
+                      pendingOrderCount: 1
+                      deliveringOrderCount: 0
+                      openRefundCount: 1
+                      openReportCount: 1
+                      cities:
+                        - id: "9000000000000000040"
+                          nameZh: 演示城市
+                          fulfillment: local
+                          deliverableDistrictNamesZh:
+                            - 演示区域
+                      localFeeCents: 600
+                      postFeeCents: 1000
+                      freeShippingThresholdCents: 10000
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /orders:
+    get:
+      operationId: listOrders
+      tags:
+        - order
+      summary: 分页查询订单
+      description: 不传 status 表示全部；状态只能取 OrderStatus。按订单快照展示，列表不提供写操作。空列表返回 items=[]、total=0。
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          required: false
+          description: 不传表示全部；空字符串或未知状态返回 VALIDATION_FAILED。
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OrderPage"
+              examples:
+                current:
+                  summary: 待配送订单
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: "9000000000000000010"
+                          orderNo: MOCK-ORDER-001
+                          status: pending
+                          fulfillment: local
+                          user: &a1
+                            id: "9000000000000000001"
+                            nickname: 演示用户
+                          cityNameZh: 演示城市
+                          timezone: Australia/Sydney
+                          slotStartAt: 2026-11-02T07:00:00Z
+                          slotEndAt: 2026-11-02T09:00:00Z
+                          itemsSummary: 示例商品 ×2
+                          actualAmountCents: 8400
+                          createdAt: 2026-11-01T00:00:00Z
+                          version: 0
+                      total: 1
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 没有匹配订单
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags:
+        - order
+      summary: 查看订单详情
+      description: 返回下单时商品/金额/地址快照及退款单跳转信息。线下含日期和时段；快递日期/时段为 null。待支付不得代付或标完成。
+        仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+              examples:
+                current:
+                  summary: 线下订单详情
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000010"
+                      orderNo: MOCK-ORDER-001
+                      status: pending
+                      fulfillment: local
+                      user: *a1
+                      cityNameZh: 演示城市
+                      timezone: Australia/Sydney
+                      slotStartAt: 2026-11-02T07:00:00Z
+                      slotEndAt: 2026-11-02T09:00:00Z
+                      actualAmountCents: 8400
+                      createdAt: 2026-11-01T00:00:00Z
+                      version: 0
+                      contactName: 演示收货人
+                      contactPhone: 0491 570 006
+                      address: &a2
+                        formatted: 演示地址，请勿配送
+                        street: 示例街道
+                        districtNameZh: 演示区域
+                        postcode: "2000"
+                      deliveryDate: 2026-11-02
+                      slotNameZh: 演示时段
+                      remark: null
+                      items: &a3
+                        - id: "9000000000000000011"
+                          productId: "9000000000000000012"
+                          nameZh: 示例商品
+                          nameEn: Example product
+                          priceCents: 3900
+                          qty: 2
+                          refundedQty: 0
+                      goodsAmountCents: 7800
+                      shippingFeeCents: 600
+                      payExpireAt: null
+                      paidAt: 2026-11-01T00:01:00Z
+                      completedAt: null
+                      completedBy: null
+                      cancelledAt: null
+                      refunds: &a4 []
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /orders/{id}/start-delivery:
+    post:
+      operationId: startOrderDelivery
+      tags:
+        - order
+      summary: 开始配送或标记已寄出
+      description: 仅 pending→delivering；线下称开始配送，快递称标记已寄出。按 id+version+旧状态原子检查并写入，成功后 version
+        递增，返回最新订单；重复/过期提交拒绝，不静默成功。 仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
+        任何状态写入前同时校验动作权限及配送资料查看权限；返回403时订单状态和版本均不改变。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+              examples:
+                current:
+                  summary: 开始配送后
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000010"
+                      orderNo: MOCK-ORDER-001
+                      status: delivering
+                      fulfillment: local
+                      user: *a1
+                      cityNameZh: 演示城市
+                      timezone: Australia/Sydney
+                      slotStartAt: 2026-11-02T07:00:00Z
+                      slotEndAt: 2026-11-02T09:00:00Z
+                      actualAmountCents: 8400
+                      createdAt: 2026-11-01T00:00:00Z
+                      version: 1
+                      contactName: 演示收货人
+                      contactPhone: 0491 570 006
+                      address: *a2
+                      deliveryDate: 2026-11-02
+                      slotNameZh: 演示时段
+                      remark: null
+                      items: *a3
+                      goodsAmountCents: 7800
+                      shippingFeeCents: 600
+                      payExpireAt: null
+                      paidAt: 2026-11-01T00:01:00Z
+                      completedAt: null
+                      completedBy: null
+                      cancelledAt: null
+                      refunds: *a4
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。 所有权限检查在状态写入前完成，403不改变订单状态或版本。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartOrderDeliveryInput"
+            examples:
+              current:
+                summary: 提交读取到的版本及预期旧状态
+                value:
+                  version: 0
+                  expectedStatus: pending
+  /orders/{id}/arrive:
+    post:
+      operationId: arriveOrder
+      tags:
+        - order
+      summary: 标记已送达
+      description: 允许 pending 或 delivering→done，包括从待配送直接送达。服务端记录
+        completedBy=staff、completedAt=当前UTC并递增版本。unpaid/refunding/refunded/cancelled/done
+        均不允许。24小时自动完成由服务端任务处理，不提供模拟时钟按钮。 仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
+        任何状态写入前同时校验动作权限及配送资料查看权限；返回403时订单状态和版本均不改变。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+              examples:
+                current:
+                  summary: 店员直接标记送达
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000010"
+                      orderNo: MOCK-ORDER-001
+                      status: done
+                      fulfillment: local
+                      user: *a1
+                      cityNameZh: 演示城市
+                      timezone: Australia/Sydney
+                      slotStartAt: 2026-11-02T07:00:00Z
+                      slotEndAt: 2026-11-02T09:00:00Z
+                      actualAmountCents: 8400
+                      createdAt: 2026-11-01T00:00:00Z
+                      version: 1
+                      contactName: 演示收货人
+                      contactPhone: 0491 570 006
+                      address: *a2
+                      deliveryDate: 2026-11-02
+                      slotNameZh: 演示时段
+                      remark: null
+                      items: *a3
+                      goodsAmountCents: 7800
+                      shippingFeeCents: 600
+                      payExpireAt: null
+                      paidAt: 2026-11-01T00:01:00Z
+                      completedAt: 2026-11-02T09:00:00Z
+                      completedBy: staff
+                      cancelledAt: null
+                      refunds: *a4
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：无本订单配送资料查看权限或执行该操作的权限；失败响应不含联系人或订单 data。 所有权限检查在状态写入前完成，403不改变订单状态或版本。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArriveOrderInput"
+            examples:
+              current:
+                summary: 提交读取到的版本及预期旧状态
+                value:
+                  version: 0
+                  expectedStatus: pending
+  /refunds:
+    get:
+      operationId: listRefunds
+      tags:
+        - refund
+      summary: 分页查询退款单
+      description: 按审核状态筛选，不按订单 refunding 状态或渠道进度代替待审。列表仅进入详情，不直接审核。
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          required: false
+          description: 不传表示全部；空字符串或未知状态返回 VALIDATION_FAILED。
+          schema:
+            $ref: "#/components/schemas/RefundStatus"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RefundPage"
+              examples:
+                current:
+                  summary: 待审退款单
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - &a5
+                          id: "9000000000000000020"
+                          refundNo: MOCK-REFUND-001
+                          orderId: "9000000000000000010"
+                          orderNo: MOCK-ORDER-001
+                          user: *a1
+                          status: open
+                          provider: null
+                          providerRefundId: null
+                          providerRefundStatus: null
+                          reason: delivery_issue
+                          extra: null
+                          items: &a6
+                            - orderItemId: "9000000000000000011"
+                              nameZh: 示例商品
+                              priceCents: 3900
+                              qty: 1
+                              amountCents: 3900
+                          goodsAmountCents: 3900
+                          shippingRefundCents: 0
+                          totalAmountCents: 3900
+                          orderStatusBeforeApply: delivering
+                          autoApproved: false
+                          reviewedBy: null
+                          reviewedAt: null
+                          createdAt: 2026-11-01T00:05:00Z
+                          version: 0
+                      total: 1
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 空退款列表
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /refunds/{id}:
+    get:
+      operationId: getRefund
+      tags:
+        - refund
+      summary: 查看退款单
+      description: 展示原因、商品数量/单价/金额、是否退运费、关联订单，以及独立渠道进度。审核通过不能等同退款成功或银行到账。渠道未选，当前只准备可替换 Mock。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Refund"
+              examples:
+                current:
+                  summary: 待审且未发起
+                  value:
+                    ok: true
+                    data: *a5
+                approvedPending:
+                  summary: 审核同意但渠道处理中
+                  value:
+                    ok: true
+                    data: &a7
+                      id: "9000000000000000020"
+                      refundNo: MOCK-REFUND-001
+                      orderId: "9000000000000000010"
+                      orderNo: MOCK-ORDER-001
+                      user: *a1
+                      status: approved
+                      provider: mock
+                      providerRefundId: mock-refund-001
+                      providerRefundStatus: pending
+                      reason: delivery_issue
+                      extra: null
+                      items: *a6
+                      goodsAmountCents: 3900
+                      shippingRefundCents: 0
+                      totalAmountCents: 3900
+                      orderStatusBeforeApply: delivering
+                      autoApproved: false
+                      reviewedBy: mock-admin
+                      reviewedAt: 2026-11-01T00:06:00Z
+                      createdAt: 2026-11-01T00:05:00Z
+                      version: 1
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /refunds/{id}/approve:
+    post:
+      operationId: approveRefund
+      tags:
+        - refund
+      summary: 同意退款审核
+      description: 仅 open 可审核，校验旧版本及旧状态。按用户确认的新口径，审核成功返回 approved，Mock 渠道可为 pending；审核成功或请求受理不增加
+        refundedQty。只有渠道成功可靠同步后，服务端幂等增加对应商品已退件数，全部退完才将订单改为
+        refunded。部分退款保持原履约状态。账面库存始终不加回。异步失败/取消保持独立渠道状态，不伪装成已到账；真实渠道接入另行对齐适配与重试。
+        已同意但渠道结果未定的退款继续占用可退件数与运费额度；发起/结算均校验已退量加未终结申请不超原购买量，运费累计不超快照运费，渠道结果入账须幂等。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Refund"
+              examples:
+                approvedPending:
+                  summary: 同意后仍处理中
+                  value:
+                    ok: true
+                    data: *a7
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRefundInput"
+            examples:
+              current:
+                summary: 提交读取到的版本及预期旧状态
+                value:
+                  version: 0
+                  expectedStatus: open
+  /refunds/{id}/reject:
+    post:
+      operationId: rejectRefund
+      tags:
+        - refund
+      summary: 拒绝退款审核
+      description: 仅 open 可拒绝。整单剩余商品申请导致订单 refunding 时，恢复 orderStatusBeforeApply；部分退款不改订单状态。拒绝不增加
+        refundedQty、不回库存、不伪造渠道退款。成功后记录审核人/UTC时间并递增版本。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Refund"
+              examples:
+                current:
+                  summary: 拒绝待审申请
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000020"
+                      refundNo: MOCK-REFUND-001
+                      orderId: "9000000000000000010"
+                      orderNo: MOCK-ORDER-001
+                      user: *a1
+                      status: rejected
+                      provider: null
+                      providerRefundId: null
+                      providerRefundStatus: null
+                      reason: delivery_issue
+                      extra: null
+                      items: *a6
+                      goodsAmountCents: 3900
+                      shippingRefundCents: 0
+                      totalAmountCents: 3900
+                      orderStatusBeforeApply: delivering
+                      autoApproved: false
+                      reviewedBy: mock-admin
+                      reviewedAt: 2026-11-01T00:06:00Z
+                      createdAt: 2026-11-01T00:05:00Z
+                      version: 1
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRefundInput"
+            examples:
+              current:
+                summary: 提交读取到的版本及预期旧状态
+                value:
+                  version: 0
+                  expectedStatus: open
+  /reports:
+    get:
+      operationId: listReports
+      tags:
+        - report
+      summary: 分页查询举报
+      description: 按 ReportStatus 筛选；展示被举报的帖子/评论、原因、补充、举报人和时间。只读查询不下架内容、不改变已浏览标记。
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          required: false
+          description: 不传表示全部；空字符串或未知状态返回 VALIDATION_FAILED。
+          schema:
+            $ref: "#/components/schemas/ReportStatus"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ReportPage"
+              examples:
+                current:
+                  summary: 待处理举报
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - &a8
+                          id: "9000000000000000030"
+                          listing: &a9
+                            id: "9000000000000000031"
+                            title: 演示帖子
+                            status: on_sale
+                            cover: &a10
+                              key: dev/report/demo/v1/cover.jpg
+                              url: https://example.invalid/mock/cover.jpg
+                              width: 600
+                              height: 800
+                            removeReason: null
+                          comment: null
+                          reason: fake_info
+                          extra: null
+                          reporter: *a1
+                          status: open
+                          handledBy: null
+                          handledAt: null
+                          createdAt: 2026-11-01T00:05:00Z
+                          version: 0
+                      total: 1
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 空举报列表
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /reports/{id}:
+    get:
+      operationId: getReport
+      tags:
+        - report
+      summary: 查看举报
+      description: 提供举报处理所需的只读帖子/评论摘要和当前帖子状态，不返回卖家手机号、微信号或联系方式申请。举报整帖时 comment=null。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Report"
+              examples:
+                current:
+                  summary: 整帖举报
+                  value:
+                    ok: true
+                    data: *a8
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+  /reports/{id}/ignore:
+    post:
+      operationId: ignoreReport
+      tags:
+        - report
+      summary: 忽略举报
+      description: 仅 open→ignored；检查举报版本和旧状态，服务端记录处理人和UTC时间。帖子、评论、已有下架原因均保持原样。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Report"
+              examples:
+                current:
+                  summary: 已忽略
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000030"
+                      listing: *a9
+                      comment: null
+                      reason: fake_info
+                      extra: null
+                      reporter: *a1
+                      status: ignored
+                      handledBy: mock-admin
+                      handledAt: 2026-11-01T00:06:00Z
+                      createdAt: 2026-11-01T00:05:00Z
+                      version: 1
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IgnoreReportInput"
+            examples:
+              current:
+                summary: 提交读取到的版本及预期旧状态
+                value:
+                  version: 0
+                  expectedStatus: open
+  /reports/{id}/takedown:
+    post:
+      operationId: takeDownReport
+      tags:
+        - report
+      summary: 下架被举报帖子或关闭举报
+      description: 仅 open→handled，需同时检查举报版本与 expectedListingStatus。帖子在售时，原因须为1–200字符且非全空白，整帖改为
+        admin_removed；即使被举报的是某条评论，也处理整帖。帖子已非在售时，仅关闭举报，不覆盖已有状态或下架原因。状态/版本已变化返回409并重新读取；不得按客户端旧状态强制覆盖。
+        举报处理与帖子状态更新必须一起成功；任一版本/旧状态校验失败，两者均不提交，不得返回部分成功。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: 成功，返回服务器确认后的完整投影
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Report"
+              examples:
+                removed:
+                  summary: 在售帖子下架
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000030"
+                      listing:
+                        id: "9000000000000000031"
+                        title: 演示帖子
+                        status: admin_removed
+                        cover: *a10
+                        removeReason: 演示：信息不符合发布要求
+                      comment: null
+                      reason: fake_info
+                      extra: null
+                      reporter: *a1
+                      status: handled
+                      handledBy: mock-admin
+                      handledAt: 2026-11-01T00:06:00Z
+                      createdAt: 2026-11-01T00:05:00Z
+                      version: 1
+                alreadyRemoved:
+                  summary: 原已下架，仅处理举报
+                  value:
+                    ok: true
+                    data:
+                      id: "9000000000000000030"
+                      listing:
+                        id: "9000000000000000031"
+                        title: 演示帖子
+                        status: admin_removed
+                        cover: *a10
+                        removeReason: 原下架原因，继续保留
+                      comment: null
+                      reason: fake_info
+                      extra: null
+                      reporter: *a1
+                      status: handled
+                      handledBy: mock-admin
+                      handledAt: 2026-11-01T00:06:00Z
+                      createdAt: 2026-11-01T00:05:00Z
+                      version: 1
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+          description: VALIDATION_FAILED：ID、分页、状态枚举或请求字段不合法。
+        "401":
+          $ref: "#/components/responses/NeedLogin"
+          description: NEED_LOGIN：管理员 token 缺失、失效或使用了顾客 token。
+        "403":
+          $ref: "#/components/responses/Forbidden"
+          description: FORBIDDEN：已登录但没有此操作权限。
+        "404":
+          $ref: "#/components/responses/NotFound"
+          description: NOT_FOUND：目标记录不存在或已逻辑删除。
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。
+        "500":
+          $ref: "#/components/responses/InternalError"
+          description: INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TakeDownReportInput"
+            examples:
+              onSale:
+                summary: 在售下架，必须填写原因
+                value:
+                  version: 0
+                  expectedStatus: open
+                  expectedListingStatus: on_sale
+                  reason: 演示：信息不符合发布要求
+              alreadyOffSale:
+                summary: 已非在售，仅关闭举报
+                value:
+                  version: 0
+                  expectedStatus: open
+                  expectedListingStatus: admin_removed
 
   # ===== A 区块结束 =====
 
@@ -515,6 +1481,949 @@ components:
     # ===== 公共部分结束 =====
 
     # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
+
+    OrderStatus:
+      type: string
+      enum:
+        - unpaid
+        - pending
+        - delivering
+        - done
+        - refunding
+        - refunded
+        - cancelled
+      description: 订单状态。后台仅允许 pending→delivering、pending/delivering→done；其余状态只读。
+    RefundStatus:
+      type: string
+      enum:
+        - open
+        - approved
+        - rejected
+      description: 审核状态，与渠道退款进度独立。approved 表示审核同意，不表示已退款或顾客银行已到账。
+    ProviderRefundStatus:
+      type: string
+      enum:
+        - pending
+        - requires_action
+        - succeeded
+        - failed
+        - canceled
+      description: 可替换渠道适配层的退款进度；参考 Stripe Refund 的五个值。当前未选择真实渠道。未发起时为 null；不得用审核同意推导 succeeded。
+    ReportStatus:
+      type: string
+      enum:
+        - open
+        - ignored
+        - handled
+      description: 举报处理状态。handled 也包含帖子原已非在售、仅关闭举报的情况。
+    ReportListingStatus:
+      type: string
+      enum:
+        - on_sale
+        - sold
+        - self_removed
+        - admin_removed
+      description: 举报只读投影中的帖子状态，与闲置模块枚举同义；不定义闲置写接口。
+    OrderItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        productId:
+          $ref: "#/components/schemas/Id"
+        nameZh:
+          type: string
+          maxLength: 60
+        nameEn:
+          type: string
+          maxLength: 120
+        priceCents:
+          $ref: "#/components/schemas/Cents"
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        refundedQty:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: 渠道成功确认并幂等入账的已退件数，0≤refundedQty≤qty；审核同意或处理中不增加。
+      required:
+        - id
+        - productId
+        - nameZh
+        - nameEn
+        - priceCents
+        - qty
+        - refundedQty
+      description: 下单时保存的商品快照，不回查商品现名或现价。
+    RefundBrief:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        refundNo:
+          type: string
+          maxLength: 64
+        status:
+          $ref: "#/components/schemas/RefundStatus"
+      required:
+        - id
+        - refundNo
+        - status
+    AddressSnapshot:
+      type: object
+      additionalProperties: false
+      properties:
+        formatted:
+          type: string
+          maxLength: 300
+        street:
+          type: string
+          maxLength: 150
+        districtNameZh:
+          anyOf:
+            - type: string
+              maxLength: 60
+            - type: "null"
+        postcode:
+          type: string
+          pattern: ^[0-9]{4}$
+          description: 四位邮编，按字符串保留。
+      required:
+        - formatted
+        - street
+        - districtNameZh
+        - postcode
+    OrderListItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        orderNo:
+          type: string
+          maxLength: 64
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        fulfillment:
+          $ref: "#/components/schemas/Fulfillment"
+        user:
+          $ref: "#/components/schemas/UserBrief"
+        cityNameZh:
+          type: string
+          maxLength: 60
+        timezone:
+          type: string
+          maxLength: 80
+          description: 城市 IANA 时区；用于显示时间点，不固定 UTC 偏移，需正确处理夏令时。
+        slotStartAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+          description: 线下配送的时段开始 UTC 时间；快递为 null。
+        slotEndAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+          description: 线下配送的时段结束 UTC 时间；快递为 null。
+        itemsSummary:
+          type: string
+          maxLength: 300
+        actualAmountCents:
+          $ref: "#/components/schemas/Cents"
+          description: 待支付和已取消仅计快照商品金额；其余状态为商品金额加快照运费。部分退款不重写下单快照。
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        version:
+          $ref: "#/components/schemas/Version"
+      required:
+        - id
+        - orderNo
+        - status
+        - fulfillment
+        - user
+        - cityNameZh
+        - timezone
+        - slotStartAt
+        - slotEndAt
+        - itemsSummary
+        - actualAmountCents
+        - createdAt
+        - version
+      description: 订单列表投影。ID、金额、地址、商品名称和价格按订单快照，不用现价或新配送配置重算。
+    Order:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        orderNo:
+          type: string
+          maxLength: 64
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        fulfillment:
+          $ref: "#/components/schemas/Fulfillment"
+        user:
+          $ref: "#/components/schemas/UserBrief"
+        cityNameZh:
+          type: string
+          maxLength: 60
+        timezone:
+          type: string
+          maxLength: 80
+        slotStartAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        slotEndAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        actualAmountCents:
+          $ref: "#/components/schemas/Cents"
+          description: 待支付/已取消仅商品金额，其他状态为快照商品金额加运费。
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        version:
+          $ref: "#/components/schemas/Version"
+        contactName:
+          type: string
+          maxLength: 60
+        contactPhone:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 收货人完整联系电话快照。2026-11-02用户确认：仅有配送资料查看权限的管理员可读取；仅用于履约，不返回到列表、用户简表、退款或举报投影。示例使用ACMA预留虚构号码。
+        address:
+          $ref: "#/components/schemas/AddressSnapshot"
+        deliveryDate:
+          anyOf:
+            - $ref: "#/components/schemas/LocalDate"
+            - type: "null"
+          description: 城市当地送达日期；快递订单为 null。
+        slotNameZh:
+          anyOf:
+            - type: string
+              maxLength: 40
+            - type: "null"
+        remark:
+          anyOf:
+            - type: string
+              maxLength: 80
+            - type: "null"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        goodsAmountCents:
+          $ref: "#/components/schemas/Cents"
+        shippingFeeCents:
+          $ref: "#/components/schemas/Cents"
+          description: 下单时保存的运费快照；待支付和已取消为 0，不用最新配置重算。
+        payExpireAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        paidAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        completedAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        completedBy:
+          anyOf:
+            - type: string
+              enum:
+                - user
+                - staff
+                - auto
+            - type: "null"
+          description: staff 为店员送达；auto 为服务端按线下时段结束满24小时自动完成；user 为用户确认收货。
+        cancelledAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        refunds:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefundBrief"
+          description: 本订单关联退款单的只读跳转信息；审核操作在退款单详情执行。
+      required:
+        - id
+        - orderNo
+        - status
+        - fulfillment
+        - user
+        - cityNameZh
+        - timezone
+        - slotStartAt
+        - slotEndAt
+        - actualAmountCents
+        - createdAt
+        - version
+        - contactName
+        - contactPhone
+        - address
+        - deliveryDate
+        - slotNameZh
+        - remark
+        - items
+        - goodsAmountCents
+        - shippingFeeCents
+        - payExpireAt
+        - paidAt
+        - completedAt
+        - completedBy
+        - cancelledAt
+        - refunds
+      description: 订单详情快照，仅返回本订单履约所需信息，不返回闲置卖家联系方式。仅具备订单配送资料查看权限的管理员可获取本响应；服务端校验权限，权限不足返回403且不返回订单联系人对象，不以客户端隐藏代替授权。
+      examples:
+        - id: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          status: pending
+          fulfillment: local
+          user: &a1
+            id: "9000000000000000001"
+            nickname: 演示用户
+          cityNameZh: 演示城市
+          timezone: Australia/Sydney
+          slotStartAt: 2026-11-02T07:00:00Z
+          slotEndAt: 2026-11-02T09:00:00Z
+          actualAmountCents: 8400
+          createdAt: 2026-11-01T00:00:00Z
+          version: 0
+          contactName: 演示收货人
+          contactPhone: 0491 570 006
+          address:
+            formatted: 演示地址，请勿配送
+            street: 示例街道
+            districtNameZh: 演示区域
+            postcode: "2000"
+          deliveryDate: 2026-11-02
+          slotNameZh: 演示时段
+          remark: null
+          items:
+            - id: "9000000000000000011"
+              productId: "9000000000000000012"
+              nameZh: 示例商品
+              nameEn: Example product
+              priceCents: 3900
+              qty: 2
+              refundedQty: 0
+          goodsAmountCents: 7800
+          shippingFeeCents: 600
+          payExpireAt: null
+          paidAt: 2026-11-01T00:01:00Z
+          completedAt: null
+          completedBy: null
+          cancelledAt: null
+          refunds: []
+    RefundItem:
+      type: object
+      additionalProperties: false
+      properties:
+        orderItemId:
+          $ref: "#/components/schemas/Id"
+        nameZh:
+          type: string
+          maxLength: 60
+        priceCents:
+          $ref: "#/components/schemas/Cents"
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        amountCents:
+          $ref: "#/components/schemas/Cents"
+      required:
+        - orderItemId
+        - nameZh
+        - priceCents
+        - qty
+        - amountCents
+    Refund:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        refundNo:
+          type: string
+          maxLength: 64
+        orderId:
+          $ref: "#/components/schemas/Id"
+        orderNo:
+          type: string
+          maxLength: 64
+        user:
+          $ref: "#/components/schemas/UserBrief"
+        status:
+          $ref: "#/components/schemas/RefundStatus"
+        provider:
+          anyOf:
+            - type: string
+              maxLength: 32
+            - type: "null"
+          description: 实际渠道适配器标识，未选择/未知为 null；Mock 示例为 mock，不表示已选择 Stripe 或微信。
+        providerRefundId:
+          anyOf:
+            - type: string
+              maxLength: 100
+            - type: "null"
+          description: 渠道退款对象标识；尚未创建为 null，禁止当作审核成功或银行到账证据。
+        providerRefundStatus:
+          anyOf:
+            - $ref: "#/components/schemas/ProviderRefundStatus"
+            - type: "null"
+          description: 未发起时对象标识和状态均为 null；对象已存在但状态未同步时为 null，显示待确认。失败、取消不增加已退件数。
+        reason:
+          $ref: "#/components/schemas/RefundReason"
+        extra:
+          anyOf:
+            - type: string
+              maxLength: 200
+            - type: "null"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefundItem"
+        goodsAmountCents:
+          $ref: "#/components/schemas/Cents"
+        shippingRefundCents:
+          $ref: "#/components/schemas/Cents"
+          description: 仅退掉全部剩余商品时可以大于0，不超过该订单尚未退还的快照运费。
+        totalAmountCents:
+          $ref: "#/components/schemas/Cents"
+          description: 等于 goodsAmountCents + shippingRefundCents，由服务端计算，前端不可提交金额。
+        orderStatusBeforeApply:
+          anyOf:
+            - $ref: "#/components/schemas/OrderStatus"
+            - type: "null"
+          description: 整单剩余商品申请时保存的原状态；拒绝整单申请时恢复，部分退款不改变订单状态。
+        autoApproved:
+          type: boolean
+          description: 待配送时用户自行退的申请可自动同意；审核状态不是 open，不提供再次同意按钮。
+        reviewedBy:
+          anyOf:
+            - type: string
+              maxLength: 60
+            - type: "null"
+        reviewedAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        version:
+          $ref: "#/components/schemas/Version"
+      required:
+        - id
+        - refundNo
+        - orderId
+        - orderNo
+        - user
+        - status
+        - provider
+        - providerRefundId
+        - providerRefundStatus
+        - reason
+        - extra
+        - items
+        - goodsAmountCents
+        - shippingRefundCents
+        - totalAmountCents
+        - orderStatusBeforeApply
+        - autoApproved
+        - reviewedBy
+        - reviewedAt
+        - createdAt
+        - version
+      description: 退款详情/列表投影。审核与渠道进度独立。待审、已同意但渠道结果未定（含pending、requires_action或未知）的申请仍占用对应可退件数和运费额度，不因审核离开open而释放。发起和成功入账时均校验剩余可退额，防止重叠申请超退。失败/取消须可靠确认终止后才按规则释放；成功入账按渠道退款标识幂等执行。当前为可替换
+        Mock 目标契约，不代表真实支付接入。
+      examples:
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: open
+          provider: null
+          providerRefundId: null
+          providerRefundStatus: null
+          reason: delivery_issue
+          extra: null
+          items: &a2
+            - orderItemId: "9000000000000000011"
+              nameZh: 示例商品
+              priceCents: 3900
+              qty: 1
+              amountCents: 3900
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: null
+          reviewedAt: null
+          createdAt: 2026-11-01T00:05:00Z
+          version: 0
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: approved
+          provider: mock
+          providerRefundId: mock-refund-001
+          providerRefundStatus: pending
+          reason: delivery_issue
+          extra: null
+          items: *a2
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: mock-admin
+          reviewedAt: 2026-11-01T00:06:00Z
+          createdAt: 2026-11-01T00:05:00Z
+          version: 1
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: approved
+          provider: mock
+          providerRefundId: mock-refund-001
+          providerRefundStatus: requires_action
+          reason: delivery_issue
+          extra: null
+          items: *a2
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: mock-admin
+          reviewedAt: 2026-11-01T00:06:00Z
+          createdAt: 2026-11-01T00:05:00Z
+          version: 1
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: approved
+          provider: mock
+          providerRefundId: mock-refund-001
+          providerRefundStatus: succeeded
+          reason: delivery_issue
+          extra: null
+          items: *a2
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: mock-admin
+          reviewedAt: 2026-11-01T00:06:00Z
+          createdAt: 2026-11-01T00:05:00Z
+          version: 1
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: approved
+          provider: mock
+          providerRefundId: mock-refund-001
+          providerRefundStatus: failed
+          reason: delivery_issue
+          extra: null
+          items: *a2
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: mock-admin
+          reviewedAt: 2026-11-01T00:06:00Z
+          createdAt: 2026-11-01T00:05:00Z
+          version: 1
+        - id: "9000000000000000020"
+          refundNo: MOCK-REFUND-001
+          orderId: "9000000000000000010"
+          orderNo: MOCK-ORDER-001
+          user: *a1
+          status: approved
+          provider: mock
+          providerRefundId: mock-refund-001
+          providerRefundStatus: canceled
+          reason: delivery_issue
+          extra: null
+          items: *a2
+          goodsAmountCents: 3900
+          shippingRefundCents: 0
+          totalAmountCents: 3900
+          orderStatusBeforeApply: delivering
+          autoApproved: false
+          reviewedBy: mock-admin
+          reviewedAt: 2026-11-01T00:06:00Z
+          createdAt: 2026-11-01T00:05:00Z
+          version: 1
+    ReportListingBrief:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        title:
+          type: string
+          maxLength: 40
+        status:
+          $ref: "#/components/schemas/ReportListingStatus"
+        cover:
+          $ref: "#/components/schemas/Image"
+        removeReason:
+          anyOf:
+            - type: string
+              maxLength: 200
+            - type: "null"
+          description: 已有下架原因的只读投影；帖子已非在售时不得覆盖。
+      required:
+        - id
+        - title
+        - status
+        - cover
+        - removeReason
+      description: 举报模块自己的只读帖子摘要，避免占用 C 区块的 Listing/ListingBrief 定义。
+    Report:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        listing:
+          $ref: "#/components/schemas/ReportListingBrief"
+        comment:
+          anyOf:
+            - $ref: "#/components/schemas/ReportCommentBrief"
+            - type: "null"
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        extra:
+          anyOf:
+            - type: string
+              maxLength: 200
+            - type: "null"
+        reporter:
+          $ref: "#/components/schemas/UserBrief"
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        handledBy:
+          anyOf:
+            - type: string
+              maxLength: 60
+            - type: "null"
+        handledAt:
+          anyOf:
+            - $ref: "#/components/schemas/DateTime"
+            - type: "null"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        version:
+          $ref: "#/components/schemas/Version"
+      required:
+        - id
+        - listing
+        - comment
+        - reason
+        - extra
+        - reporter
+        - status
+        - handledBy
+        - handledAt
+        - createdAt
+        - version
+      description: 举报整条帖子时 comment=null。处理人、时间由服务端身份与时钟决定，不接收前端伪造。
+      examples:
+        - id: "9000000000000000030"
+          listing: &a3
+            id: "9000000000000000031"
+            title: 演示帖子
+            status: on_sale
+            cover:
+              key: dev/report/demo/v1/cover.jpg
+              url: https://example.invalid/mock/cover.jpg
+              width: 600
+              height: 800
+            removeReason: null
+          comment: null
+          reason: fake_info
+          extra: null
+          reporter: *a1
+          status: open
+          handledBy: null
+          handledAt: null
+          createdAt: 2026-11-01T00:05:00Z
+          version: 0
+        - id: "9000000000000000030"
+          listing: *a3
+          comment:
+            id: "9000000000000000032"
+            content: ""
+            deleted: true
+          reason: fake_info
+          extra: null
+          reporter: *a1
+          status: open
+          handledBy: null
+          handledAt: null
+          createdAt: 2026-11-01T00:05:00Z
+          version: 0
+    CityOverview:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        nameZh:
+          type: string
+          maxLength: 40
+        fulfillment:
+          $ref: "#/components/schemas/Fulfillment"
+        deliverableDistrictNamesZh:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+      required:
+        - id
+        - nameZh
+        - fulfillment
+        - deliverableDistrictNamesZh
+    Summary:
+      type: object
+      additionalProperties: false
+      properties:
+        pendingOrderCount:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        deliveringOrderCount:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        openRefundCount:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: 仅统计 status=open 的退款单，不统计订单 refunding 数，也不把 approved+pending 计作待审。
+        openReportCount:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: 仅统计 status=open 的举报。
+        cities:
+          type: array
+          items:
+            $ref: "#/components/schemas/CityOverview"
+        localFeeCents:
+          $ref: "#/components/schemas/Cents"
+        postFeeCents:
+          $ref: "#/components/schemas/Cents"
+        freeShippingThresholdCents:
+          $ref: "#/components/schemas/Cents"
+      required:
+        - pendingOrderCount
+        - deliveringOrderCount
+        - openRefundCount
+        - openReportCount
+        - cities
+        - localFeeCents
+        - postFeeCents
+        - freeShippingThresholdCents
+      description: 服务端实时计算四项待办计数；配送配置和城市只读展示，不包含商城配置写接口。
+    RefundReason:
+      type: string
+      enum:
+        - changed_mind
+        - wrong_address
+        - delivery_issue
+        - other
+      description: 退款原因，沿用字段字典。
+    ReportReason:
+      type: string
+      enum:
+        - fake_info
+        - harassment
+        - prohibited
+        - other
+      description: 举报原因，沿用字段字典。
+    ReportCommentBrief:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        content:
+          type: string
+          maxLength: 200
+          description: 评论被删除时必须返回空字符串，不泄露原正文。
+        deleted:
+          type: boolean
+      required:
+        - id
+        - content
+        - deleted
+      description: 被举报评论的只读摘要；即使举报某一楼，第一版也处理整条帖子。
+      if:
+        required:
+          - deleted
+        properties:
+          deleted:
+            const: true
+      then:
+        properties:
+          content:
+            const: ""
+    OrderPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderListItem"
+    RefundPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Refund"
+    ReportPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Report"
+    StartOrderDeliveryInput:
+      type: object
+      description: 提交读取到的版本与旧状态；操作者和时间取服务端上下文。
+      additionalProperties: false
+      required:
+        - version
+        - expectedStatus
+      properties:
+        version: &a4
+          $ref: "#/components/schemas/Version"
+        expectedStatus:
+          type: string
+          enum:
+            - pending
+    ArriveOrderInput:
+      type: object
+      description: 允许待配送直接送达；不接收完成时间或完成人。
+      additionalProperties: false
+      required:
+        - version
+        - expectedStatus
+      properties:
+        version: *a4
+        expectedStatus:
+          type: string
+          enum:
+            - pending
+            - delivering
+    ReviewRefundInput:
+      type: object
+      description: 只审核待审退款；不接收金额、数量或审核人。
+      additionalProperties: false
+      required:
+        - version
+        - expectedStatus
+      properties:
+        version: *a4
+        expectedStatus:
+          type: string
+          enum:
+            - open
+    IgnoreReportInput:
+      type: object
+      description: 只忽略待处理举报，不改变帖子和已有原因。
+      additionalProperties: false
+      required:
+        - version
+        - expectedStatus
+      properties:
+        version: *a4
+        expectedStatus:
+          type: string
+          enum:
+            - open
+    TakeDownReportInput:
+      description: 按读取到的帖子状态分支。在售时原因必填；已非在售仅关闭举报，不提交新原因。服务端检查举报版本及帖子旧状态，任一过期均拒绝，不能以客户端状态绕过检查。
+      oneOf:
+        - type: object
+          description: 下架在售帖子并处理举报。
+          additionalProperties: false
+          required:
+            - version
+            - expectedStatus
+            - expectedListingStatus
+            - reason
+          properties:
+            version: *a4
+            expectedStatus: &a5
+              type: string
+              enum:
+                - open
+            expectedListingStatus:
+              type: string
+              enum:
+                - on_sale
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 200
+              pattern: \S
+              description: 1–200字符，不能全为空白；下架后展示给卖家。
+        - type: object
+          description: 帖子已非在售，只处理举报并保留原下架原因。
+          additionalProperties: false
+          required:
+            - version
+            - expectedStatus
+            - expectedListingStatus
+          properties:
+            version: *a4
+            expectedStatus: *a5
+            expectedListingStatus:
+              type: string
+              enum:
+                - sold
+                - self_removed
+                - admin_removed
 
     # ===== A 区块结束 =====
 
