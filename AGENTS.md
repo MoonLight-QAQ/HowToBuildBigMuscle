@@ -41,7 +41,7 @@ Go 工程的模块路径为 `github.com/MoonLight-QAQ/HowToBuildBigMuscle/backen
 | `docs/design/` | 架构设计、字段清单 |
 | `docs/api/` | 接口约定与接口契约（OpenAPI） |
 | `docs/adr/` | 架构决策记录 |
-| `docs/tasks/` | 任务清单与锁定目录 |
+| `docs/tasks/` | 任务清单、锁定目录、GitHub Project 使用指南 |
 | `.agents/skills/` | AI 的操作手册（skill），Claude Code 和 Codex 通过符号链接共用 |
 | `.github/repo-settings/` | GitHub 仓库设置（分支保护等），以代码形式管理 |
 
@@ -118,10 +118,13 @@ Go 工程的模块路径为 `github.com/MoonLight-QAQ/HowToBuildBigMuscle/backen
 
 ## 任务与锁定
 
-- 任务清单在 `docs/tasks/` 下，每个阶段一份（当前为 `admin-web.md`）。
-- 开始一个任务前，先在清单中确认这个任务的 ID、范围和负责人。**只修改该任务「范围」列出的目录**，需要改动范围之外的文件时，先告诉用户。
-- 任务完成的那个 PR 里，同时做两件事：把清单里的状态改为「已完成 🔒」，并把该任务的目录加入 `docs/tasks/locked-paths.txt`。
+- 每个任务是一个 GitHub issue，标题以任务 ID 开头，如 `[W-02] 城市（示例模块）`。任务的状态和计划日期在 GitHub Project 看板上管理。
+- 开始一个任务前，先读取它的 issue：`gh issue view <编号>`；只知道任务 ID 时，用 `gh issue list --label task --search "<任务ID> in:title"` 查找。确认任务的**范围**和**依赖**。
+- **只修改该任务「范围」列出的目录和文件**，需要改动范围之外的文件时，先告诉用户。
+- **不修改任务的状态**：不关闭 issue、不编辑看板、不修改负责人。这些由人在看板上操作，PR 合并后状态会自动更新。
+- 完成任务的那个 PR 里，把任务范围内的目录加入 `docs/tasks/locked-paths.txt`；PR 描述写 `Closes #<issue编号>`。只完成一部分的 PR，写 `Refs #<issue编号>`。
 - 已锁定的目录，修改前必须得到负责人同意；PR 需要加上 `unlock` 标签才能合并。
+- 任务清单 `docs/tasks/admin-web.md` 是范围和依赖的一览表，看板的用法见 `docs/tasks/github-project-guide.md`。
 
 ## AI 的工作方式
 
@@ -144,6 +147,7 @@ Go 工程的模块路径为 `github.com/MoonLight-QAQ/HowToBuildBigMuscle/backen
 | 想了解 | 看这里 |
 | --- | --- |
 | 协作流程、本地环境配置 | `CONTRIBUTING.md` |
+| 任务的状态和看板用法 | `docs/tasks/github-project-guide.md` |
 | 架构设计 | `docs/design/architecture.md` |
 | 接口约定 | `docs/api/conventions.md` |
 | 某个工程的具体规则 | 该工程目录下的 `AGENTS.md` |

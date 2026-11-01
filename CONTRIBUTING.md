@@ -9,7 +9,7 @@ AI 需要遵守的规则写在 `AGENTS.md` 中。两份文件内容一致，本�
 1. 本文件的「一、本地环境配置」，完成一次性配置。
 2. 根目录 `AGENTS.md`，了解仓库结构和硬规则。
 3. 你负责的工程目录下的 `AGENTS.md`。
-4. `docs/tasks/` 下的任务清单，找到分配给你的任务。
+4. `docs/tasks/github-project-guide.md`，了解如何在 GitHub Project 看板上查看和更新任务。
 
 ---
 
@@ -110,7 +110,11 @@ lefthook install
 
 ### 1. 领任务
 
-在 `docs/tasks/` 的任务清单中找到分配给你的任务，记下**任务 ID** 和**范围**。
+1. 打开 GitHub Project 看板「拾澳 · 管理后台前端」，切到「**我的任务**」视图。
+2. 打开要做的任务，确认描述中的**范围**和**依赖**，依赖的任务都应在 `Done` 列。
+3. 在「看板」视图中，把卡片拖到 **In Progress**。
+
+看板的完整用法见 `docs/tasks/github-project-guide.md`。
 
 ### 2. 从最新的 develop 拉分支
 
@@ -126,7 +130,7 @@ git checkout -b feat/fe-web-city
 
 1. 从仓库根目录启动 `claude`。
 2. 切换到 **plan** 模式，说明任务，例如：
-   > 完成任务 W-01 城市管理。需求见 docs/prd/admin-prd.md 的城市一节，原型见 docs/prototype/admin。
+   > 开始任务 W-02（issue #12）。先读取 issue 的内容，给出计划。
 3. 审阅 AI 给出的计划：改哪些文件、是否在任务范围内、是否需要先改接口契约。有问题直接指出，确认后再切回 manual 模式执行。
 4. 每处改动都在 GoLand 的对比窗口中确认。
 
@@ -154,13 +158,14 @@ gh pr create --base develop
 
 - **目标分支必须是 `develop`。**
 - 标题格式：`类型(范围): 中文描述`，如 `feat(fe-web): 城市管理页面`。
-- 按 PR 模板填写描述。
+- 按 PR 模板填写描述。**「关联任务」一行必须填写**：完成任务写 `Closes #issue编号`，只完成一部分写 `Refs #issue编号`。
+- 如果这个 PR 完成了任务，同时把任务范围内的目录加入 `docs/tasks/locked-paths.txt`。
 
 ### 7. 审查与合并
 
 - 至少 1 人审批后才能合并。所有审查意见都处理完（Resolve），才能合并。
 - 收到审查意见后，在同一个分支上修改并推送，PR 会自动更新。新的提交会让之前的审批失效，需要重新审批。
-- 审批通过后，点 **Squash and merge**。
+- 审批通过后，点 **Squash and merge**。合并后，看板上的任务会自动移到 **Done**。
 
 ### 8. 合并后清理
 
@@ -196,12 +201,24 @@ git branch -D feat/fe-web-city
 
 ---
 
-## 四、任务清单与锁定
+## 四、任务与锁定
 
-### 状态
+任务的状态在 GitHub Project 看板上管理，范围和锁定目录在 `docs/tasks/` 中，详见：
 
-| 状态 | 含义 |
+- `docs/tasks/github-project-guide.md`：看板的概念、日常操作、常见问题
+- `docs/tasks/README.md`：任务的完整流程、锁定机制
+
+最重要的几条：
+
+| 时机 | 做什么 |
 | --- | --- |
+| 开始任务 | 在看板上把卡片拖到 **In Progress** |
+| 提 PR | 描述里写 `Closes #issue编号`（完成任务）或 `Refs #issue编号`（只完成一部分） |
+| 完成任务的 PR | 同时把任务范围内的目录加入 `docs/tasks/locked-paths.txt` |
+| PR 合并后 | 任务**自动**移到 **Done**，不要手动拖动 |
+| 需要修改已锁定的模块 | 先和负责人沟通，PR 加 `unlock` 标签，由负责人审批 |
+
+--- | --- |
 | ⬜ 待办 | 还没开始 |
 | 🚧 进行中 | 已有人在做 |
 | ✅ 已完成 🔒 | 已合并，目录已锁定 |

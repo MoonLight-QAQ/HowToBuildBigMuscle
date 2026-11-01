@@ -39,7 +39,8 @@
 | 2 | `AGENTS.md` | 仓库的硬规则、接口约定、分支规则 |
 | 3 | `CONTRIBUTING.md` | 具体操作步骤 |
 | 4 | 你负责的工程目录下的 `AGENTS.md`，如 `frontend/web/AGENTS.md` | 该工程的规则 |
-| 5 | `docs/tasks/admin-web.md` | 分配给你的任务 |
+| 5 | `docs/tasks/github-project-guide.md` | 如何在看板上查看和更新任务 |
+| 6 | GitHub Project 看板「拾澳 · 管理后台前端」的「我的任务」视图 | 分配给你的任务 |
 
 ### 第 2 步：安装工具（20 分钟）
 
@@ -119,6 +120,8 @@ HowToBuildBigMuscle/
 │   └── skills → ../.agents/skills
 ├── .github/
 │   ├── repo-settings/           # GitHub 仓库设置（分支保护等），以代码形式管理
+│   ├── project-setup/           # 一键创建任务看板和任务 issue 的脚本
+│   ├── ISSUE_TEMPLATE/          # 新建任务时使用的模板
 │   ├── workflows/               # CI 流水线（待建）
 │   ├── CODEOWNERS               # 每个目录由谁负责审查
 │   └── pull_request_template.md # PR 描述模板
@@ -130,7 +133,7 @@ HowToBuildBigMuscle/
 │   ├── api/                     # 接口通用约定、接口契约（待写）
 │   ├── adr/                     # 架构决策记录
 │   ├── sql/                     # 表设计（表设计阶段编写）
-│   └── tasks/                   # 任务清单、锁定目录
+│   └── tasks/                   # 任务清单、锁定目录、看板使用指南
 │
 ├── frontend/
 │   ├── web/                     # 管理后台前端（Vue 3）       ← 当前阶段
@@ -181,13 +184,13 @@ HowToBuildBigMuscle/
 详细步骤和命令见 `CONTRIBUTING.md` 第二部分。
 
 ```text
-1. 在 docs/tasks/ 中找到自己的任务，确认任务 ID 和范围
+1. 在看板的「我的任务」视图找到任务，确认范围和依赖，把卡片拖到 In Progress
 2. git checkout develop && git pull && git checkout -b feat/fe-web-xxx
 3. 启动 Claude Code → plan 模式出计划 → 确认后切回 manual 模式执行
 4. 运行检查（lint、类型检查、测试、构建），在 GoLand 中看一遍所有改动
 5. /pr-checklist 自查
-6. git push，然后 gh pr create --base develop
-7. 等待审查（审查人当天给出意见），Squash 合并
+6. git push，然后 gh pr create --base develop，描述里写 Closes #issue编号
+7. 等待审查（审查人当天给出意见），Squash 合并，任务自动移到 Done
 8. git checkout develop && git pull && git branch -D feat/fe-web-xxx
 ```
 
@@ -208,9 +211,9 @@ HowToBuildBigMuscle/
 
 | 代号 | GitHub | 业务模块 |
 | --- | --- | --- |
-| A | @RealninX | 概览、订单、退款 |
+| A | @RealninX | 概览、订单、退款、举报 |
 | B | @MoonLight-QAQ | 城市、商城类目、商品、配送 |
-| C | @Yue0131 | 登录、闲置类目、闲置、举报 |
+| C | @Yue0131 | 登录、闲置类目、闲置 |
 
 接口契约、工程骨架、共享区域由三人共同完成，拆成子任务，每个子任务有一位负责人。
 
@@ -228,7 +231,7 @@ W-02 城市（B，示例模块，其他人照着它的写法开发）
 其余业务模块并行开发
 ```
 
-完整任务清单、范围和状态见 `docs/tasks/admin-web.md`。
+每个任务的范围和依赖见 `docs/tasks/admin-web.md`；**状态和计划日期在 GitHub Project 看板上**，看板的「路线图」视图就是甘特图，可以直接拖动调整。
 
 ### 代码审查
 
@@ -275,7 +278,8 @@ W-02 城市（B，示例模块，其他人照着它的写法开发）
 
 ### 4. 任务与锁定机制
 
-- 每个开发阶段一份任务清单（`docs/tasks/`），每个任务有 ID、范围、负责人、依赖和状态。
+- 每个任务是一个 GitHub issue，放在 GitHub Project 看板上。**拖动卡片改状态，拖动路线图上的横条改日期**；PR 合并后任务自动变为已完成。看板由 `.github/project-setup/` 中的脚本一键创建。
+- 每个开发阶段一份任务清单（`docs/tasks/`），记录每个任务的范围、依赖和负责人。
 - **任务完成后，其范围内的目录加入 `docs/tasks/locked-paths.txt`，默认不允许修改。**
 - 修改已锁定的模块：先和负责人沟通 → PR 加 `unlock` 标签 → 负责人审批。
 - 锁定通过三层执行：`AGENTS.md` 中的规则提醒 AI；Claude Code 钩子直接拦截；CI 检查（待建）阻止合并。
@@ -332,15 +336,10 @@ W-02 城市（B，示例模块，其他人照着它的写法开发）
 | 管理端的字段和状态 | `docs/design/admin-data-dictionary.md` |
 | 接口约定 | `docs/api/conventions.md` |
 | 为什么这样设计 | `docs/adr/` |
-| 任务和负责人 | `docs/tasks/admin-web.md` |
+| 任务的范围、依赖、负责人 | `docs/tasks/admin-web.md` |
+| 任务的状态、计划日期 | GitHub Project 看板「拾澳 · 管理后台前端」 |
+| 看板怎么用 | `docs/tasks/github-project-guide.md` |
 | 谁负责审查哪部分代码 | `.github/CODEOWNERS` |
 | 仓库设置怎么改 | `.github/repo-settings/README.md` |
 
 遇到问题，先查 `CONTRIBUTING.md` 最后的「常见问题」。
-
-# -
-天仙下凡三百万，斩你无需第二剑
-# -
-重瞳已是无敌路，何需再借他人骨
-# -
-不借仙劍不借骨，自開天門自封神

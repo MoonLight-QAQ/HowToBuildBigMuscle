@@ -24,7 +24,14 @@
       "Bash(git reset --hard:*)",
       "Bash(rm -rf:*)",
       "Bash(pnpm add:*)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue reopen:*)",
+      "Bash(gh project item-edit:*)",
+      "Bash(gh project item-archive:*)",
+      "Bash(gh project item-delete:*)",
+      "Bash(gh pr merge:*)"
     ]
   },
   "hooks": {
@@ -32,13 +39,19 @@
       {
         "matcher": "Edit|MultiEdit|Write",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-locked-paths.sh\"" }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-locked-paths.sh\""
+          }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-protected-branch.sh\"" }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-protected-branch.sh\""
+          }
         ]
       }
     ]

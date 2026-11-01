@@ -9,10 +9,14 @@ description: 新增一个业务模块（当前阶段为管理后台前端 fronte
 
 ## 第 1 步：确认任务
 
-1. 在 `docs/tasks/` 的任务清单中找到这个任务，确认：任务 ID、负责人、**范围**（允许修改的目录和文件）。
-2. 查看 `docs/tasks/locked-paths.txt`，确认范围内没有已锁定的目录。
-3. 确认当前分支不是 `develop` 或 `main`，且分支名符合 `类型/范围-简短描述`。不符合时提醒用户先创建分支。
-4. 如果任务不在清单中，或者范围不清楚，**停下来问用户**。
+1. 读取任务的 GitHub issue，确认：任务 ID、负责人、**范围**（允许修改的目录和文件）、**依赖**。
+   - 用户给了 issue 编号时：`gh issue view <编号>`
+   - 只给了任务 ID 时：`gh issue list --label task --search "<任务ID> in:title"`，找到编号后再查看
+2. 确认依赖的任务都已完成：逐个执行 `gh issue view <依赖任务的编号>`，状态应为 `CLOSED`。有未完成的依赖时，告诉用户。
+3. 查看 `docs/tasks/locked-paths.txt`，确认范围内没有已锁定的目录。
+4. 确认当前分支不是 `develop` 或 `main`，且分支名符合 `类型/范围-简短描述`。不符合时提醒用户先创建分支。
+5. 提醒用户：如果还没有在看板上把这个任务拖到 `In Progress`，现在去拖一下。**不要自己修改看板或 issue 的状态。**
+6. 找不到对应的 issue，或者范围不清楚时，**停下来问用户**。
 
 ## 第 2 步：理解需求
 
@@ -78,5 +82,6 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## 第 10 步：收尾
 
-1. 执行 `pr-checklist` skill，逐项自查。
-2. 提醒用户：如果这是该任务的最后一个 PR，需要在任务清单中把状态改为「已完成 🔒」，并把范围内的目录加入 `docs/tasks/locked-paths.txt`。
+1. 如果这是完成该任务的 PR，把 issue 中「范围」列出的路径逐行加入 `docs/tasks/locked-paths.txt`。
+2. 执行 `pr-checklist` skill，逐项自查。
+3. 提醒用户：PR 描述的「关联任务」一行写 `Closes #<issue编号>`（完成任务）或 `Refs #<issue编号>`（只完成一部分）。合并后看板会自动更新状态。
