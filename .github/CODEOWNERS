@@ -1,0 +1,99 @@
+# 代码负责人
+#
+# PR 改动了下列路径时，GitHub 会自动请求对应的负责人审查。
+# 同一个文件匹配多条规则时，以【最后一条】为准，所以通用规则在前、具体规则在后。
+#
+# 每个模块都列了两个人：第一位是负责人，第二位是备份审查人。
+# 原因：GitHub 不允许作者批准自己的 PR。如果一个模块只有一个负责人，
+# 他修改自己的模块时，就没有人能完成负责人审查。
+#
+# 成员：
+#   A = @RealninX       订单、退款、概览
+#   B = @MoonLight-QAQ  商品、商城类目、配送、城市
+#   C = @Yue0131        闲置、闲置类目、举报、登录
+#   工程骨架、共享区域、仓库配置、文档：三人共同负责，除作者外任意一人审查即可
+
+# ---------- 默认：仓库内其他所有文件 ----------
+*                                           @MoonLight-QAQ @Yue0131 @RealninX
+
+# ---------- 仓库配置与规则 ----------
+/.github/                                   @MoonLight-QAQ @Yue0131 @RealninX
+/.claude/                                   @MoonLight-QAQ @Yue0131 @RealninX
+/.agents/                                   @MoonLight-QAQ @Yue0131 @RealninX
+/.codex/                                    @MoonLight-QAQ @Yue0131 @RealninX
+/lefthook.yml                               @MoonLight-QAQ @Yue0131 @RealninX
+/.editorconfig                              @MoonLight-QAQ @Yue0131 @RealninX
+/.gitignore                                 @MoonLight-QAQ @Yue0131 @RealninX
+/AGENTS.md                                  @MoonLight-QAQ @Yue0131 @RealninX
+/CLAUDE.md                                  @MoonLight-QAQ @Yue0131 @RealninX
+/CONTRIBUTING.md                            @MoonLight-QAQ @Yue0131 @RealninX
+
+# ---------- 文档 ----------
+# 接口契约和任务清单影响所有人，除作者外任意一人审查即可
+/docs/                                      @MoonLight-QAQ @Yue0131 @RealninX
+
+# ---------- 管理后台前端：工程骨架与共享区域（三人共同负责） ----------
+/frontend/web/                              @MoonLight-QAQ @Yue0131 @RealninX
+
+# ---------- 管理后台前端：A 的模块 ----------
+/frontend/web/src/views/dashboard/          @RealninX @MoonLight-QAQ
+/frontend/web/src/api/dashboard.ts          @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/handlers/dashboard.ts  @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/data/dashboard.ts   @RealninX @MoonLight-QAQ
+
+/frontend/web/src/views/order/              @RealninX @MoonLight-QAQ
+/frontend/web/src/api/order.ts              @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/handlers/order.ts   @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/data/order.ts       @RealninX @MoonLight-QAQ
+
+/frontend/web/src/views/refund/             @RealninX @MoonLight-QAQ
+/frontend/web/src/api/refund.ts             @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/handlers/refund.ts  @RealninX @MoonLight-QAQ
+/frontend/web/src/mocks/data/refund.ts      @RealninX @MoonLight-QAQ
+
+# ---------- 管理后台前端：B 的模块 ----------
+/frontend/web/src/views/city/               @MoonLight-QAQ @Yue0131
+/frontend/web/src/api/city.ts               @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/handlers/city.ts    @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/data/city.ts        @MoonLight-QAQ @Yue0131
+
+/frontend/web/src/views/mall-category/      @MoonLight-QAQ @Yue0131
+/frontend/web/src/api/mall-category.ts      @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/handlers/mall-category.ts  @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/data/mall-category.ts      @MoonLight-QAQ @Yue0131
+
+/frontend/web/src/views/product/            @MoonLight-QAQ @Yue0131
+/frontend/web/src/api/product.ts            @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/handlers/product.ts @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/data/product.ts     @MoonLight-QAQ @Yue0131
+
+/frontend/web/src/views/delivery/           @MoonLight-QAQ @Yue0131
+/frontend/web/src/api/delivery.ts           @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/handlers/delivery.ts  @MoonLight-QAQ @Yue0131
+/frontend/web/src/mocks/data/delivery.ts    @MoonLight-QAQ @Yue0131
+
+# ---------- 管理后台前端：C 的模块 ----------
+/frontend/web/src/views/login/              @Yue0131 @RealninX
+/frontend/web/src/api/auth.ts               @Yue0131 @RealninX
+/frontend/web/src/mocks/handlers/auth.ts    @Yue0131 @RealninX
+/frontend/web/src/mocks/data/auth.ts        @Yue0131 @RealninX
+
+/frontend/web/src/views/flea-category/      @Yue0131 @RealninX
+/frontend/web/src/api/flea-category.ts      @Yue0131 @RealninX
+/frontend/web/src/mocks/handlers/flea-category.ts  @Yue0131 @RealninX
+/frontend/web/src/mocks/data/flea-category.ts      @Yue0131 @RealninX
+
+/frontend/web/src/views/listing/            @Yue0131 @RealninX
+/frontend/web/src/api/listing.ts            @Yue0131 @RealninX
+/frontend/web/src/mocks/handlers/listing.ts @Yue0131 @RealninX
+/frontend/web/src/mocks/data/listing.ts     @Yue0131 @RealninX
+
+/frontend/web/src/views/report/             @Yue0131 @RealninX
+/frontend/web/src/api/report.ts             @Yue0131 @RealninX
+/frontend/web/src/mocks/handlers/report.ts  @Yue0131 @RealninX
+/frontend/web/src/mocks/data/report.ts      @Yue0131 @RealninX
+
+# ---------- 尚未开工的工程（开工时再细分） ----------
+/frontend/mini/                             @MoonLight-QAQ @Yue0131 @RealninX
+/frontend/app/                              @MoonLight-QAQ @Yue0131 @RealninX
+/backend/                                   @MoonLight-QAQ @Yue0131 @RealninX
