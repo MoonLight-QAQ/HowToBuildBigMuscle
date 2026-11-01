@@ -1,0 +1,492 @@
+# 拾澳 PickAus 管理端接口契约
+#
+# 通用约定见 docs/api/conventions.md，各业务对象的字段见 docs/design/admin-data-dictionary.md。
+# 本文件与它们不一致时，先停下来确认，不要自行选择。
+#
+# ---------------------------------------------------------------------------
+# 文件结构与分工
+# ---------------------------------------------------------------------------
+#
+# 本文件由公共部分和三个负责人区块组成：
+#
+#   公共部分（W-00a）：文件头、tags、鉴权、公共 schemas / parameters / responses
+#   A 区块 @RealninX（W-00b）：概览、订单、退款、举报
+#   B 区块 @MoonLight-QAQ（W-00c）：城市、商城类目、商品、配送、图片上传
+#   C 区块 @celine-hy（W-00d）：登录、闲置类目、闲置
+#
+# 规则：
+#   1. 每人只在自己的区块内添加内容，区块位于 paths 和 components.schemas 中，
+#      以「===== X 区块 =====」和「===== X 区块结束 =====」两行注释为界。
+#   2. 可以引用公共部分和别人区块中的定义（$ref），但不要修改别人区块的内容。
+#      需要修改时，先和对方沟通，由对方修改。
+#   3. 需要新增公共定义、或修改公共部分时，先和所有人沟通，单独提 PR。
+#   4. 模块自己用的查询参数直接写在接口内，不放进 components.parameters。
+#
+# ---------------------------------------------------------------------------
+# 写法示例（复制后修改）
+# ---------------------------------------------------------------------------
+#
+# 【成功响应】OpenAPI 没有泛型，用 allOf 把 OkResponse 和本接口的 data 合在一起：
+#
+#   responses:
+#     '200':
+#       description: 成功
+#       content:
+#         application/json:
+#           schema:
+#             allOf:
+#               - $ref: '#/components/schemas/OkResponse'
+#               - type: object
+#                 properties:
+#                   data:
+#                     $ref: '#/components/schemas/City'
+#
+# 【分页列表】data 由 PageMeta 和 items 组成，查询参数引用 Page 和 PageSize：
+#
+#   parameters:
+#     - $ref: '#/components/parameters/Page'
+#     - $ref: '#/components/parameters/PageSize'
+#     - name: status
+#       in: query
+#       schema:
+#         $ref: '#/components/schemas/OrderStatus'
+#   responses:
+#     '200':
+#       description: 成功
+#       content:
+#         application/json:
+#           schema:
+#             allOf:
+#               - $ref: '#/components/schemas/OkResponse'
+#               - type: object
+#                 properties:
+#                   data:
+#                     allOf:
+#                       - $ref: '#/components/schemas/PageMeta'
+#                       - type: object
+#                         required: [items]
+#                         properties:
+#                           items:
+#                             type: array
+#                             items:
+#                               $ref: '#/components/schemas/OrderListItem'
+#
+# 【不分页列表】（类目、城市、时段等）data 只有 items，不带分页字段：
+#
+#                   data:
+#                     type: object
+#                     required: [items]
+#                     properties:
+#                       items:
+#                         type: array
+#                         items:
+#                           $ref: '#/components/schemas/City'
+#
+# 【没有数据返回】（如删除成功）直接引用 OkNoData：
+#
+#   responses:
+#     '200':
+#       $ref: '#/components/responses/OkNoData'
+#
+# 【错误码】每个接口都要写出可能返回的错误。引用公共的错误响应，
+# 并在 description 中写明这个接口在该状态码下可能返回哪些 code：
+#
+#   responses:
+#     '400':
+#       $ref: '#/components/responses/ValidationFailed'
+#     '401':
+#       $ref: '#/components/responses/NeedLogin'
+#     '404':
+#       $ref: '#/components/responses/NotFound'
+#     '409':
+#       $ref: '#/components/responses/Conflict'
+#       description: NAME_DUPLICATED（名称与已有城市重复）
+#
+# 【路径中的 ID】引用 IdPath：
+#
+#   /cities/{id}:
+#     parameters:
+#       - $ref: '#/components/parameters/IdPath'
+#
+# 【不需要登录的接口】（只有登录接口）在接口上写 security: []。
+#
+# 【operationId】camelCase 的「动词 + 名词」，如 listOrders、getOrder、startOrderDelivery。
+
+openapi: 3.1.0
+
+info:
+  title: 拾澳 PickAus 管理端接口
+  version: 0.1.0
+  description: |
+    拾澳管理后台使用的接口。
+
+    - 通用约定：`docs/api/conventions.md`
+    - 字段清单：`docs/design/admin-data-dictionary.md`
+
+servers:
+  - url: /api/admin
+    description: 管理端接口前缀
+
+security:
+  - bearerAuth: []
+
+# 所有模块的 tag 在这里统一定义，各区块直接使用，不要新增或修改。
+tags:
+  # A @RealninX
+  - name: dashboard
+    description: 概览
+  - name: order
+    description: 订单
+  - name: refund
+    description: 退款
+  - name: report
+    description: 举报
+  # B @MoonLight-QAQ
+  - name: city
+    description: 城市
+  - name: mall-category
+    description: 商城类目
+  - name: product
+    description: 商品
+  - name: delivery
+    description: 配送（费用、时段、区）
+  - name: upload
+    description: 图片上传
+  # C @celine-hy
+  - name: auth
+    description: 登录
+  - name: flea-category
+    description: 闲置类目
+  - name: listing
+    description: 闲置
+
+paths:
+  # 以下两行是公共部分，保证 paths 在没有任何接口时也是合法的，不要删除。
+  x-blocks:
+    description: 接口按负责人分为 A、B、C 三个区块，见文件开头的说明。
+
+  # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
+
+  # ===== A 区块结束 =====
+
+  # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
+
+  # ===== B 区块结束 =====
+
+  # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
+
+  # ===== C 区块结束 =====
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        登录接口返回的管理员 token，放在请求头中：`Authorization: Bearer <token>`。
+        顾客 token 不能调用管理端接口。token 缺失、过期或无效时返回 `NEED_LOGIN`。
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 页码，从 1 开始
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: 每页条数
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: 资源 ID
+      schema:
+        $ref: '#/components/schemas/Id'
+
+  responses:
+    OkNoData:
+      description: 成功，没有数据返回
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/OkResponse'
+              - type: object
+                properties:
+                  data:
+                    type: 'null'
+          example:
+            ok: true
+            data: null
+    ValidationFailed:
+      description: VALIDATION_FAILED（参数校验失败，详情见 details）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: VALIDATION_FAILED
+            message: 参数校验失败
+            details:
+              - field: nameZh
+                message: 不能为空
+    NeedLogin:
+      description: NEED_LOGIN（未登录，或 token 失效）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: NEED_LOGIN
+            message: 登录已失效，请重新登录
+    Forbidden:
+      description: FORBIDDEN（没有权限）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: FORBIDDEN
+            message: 没有权限
+    NotFound:
+      description: NOT_FOUND（资源不存在）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: NOT_FOUND
+            message: 数据不存在或已被删除
+    Conflict:
+      description: 业务规则不允许。具体的 code 在各接口中写明
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: INVALID_STATUS
+            message: 当前状态不允许此操作，请刷新后重试
+    InternalError:
+      description: INTERNAL_ERROR（服务器内部错误）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: INTERNAL_ERROR
+            message: 服务器开小差了，请稍后重试
+
+  schemas:
+    # ===== 公共部分（W-00a）=====
+
+    # ---------- 基础类型 ----------
+
+    Id:
+      type: string
+      pattern: '^[0-9]{1,20}$'
+      description: 雪花 ID，一律用字符串传输。前端不要转成数字，不要比较大小
+      examples:
+        - '1854239876543209472'
+    Cents:
+      type: integer
+      minimum: 0
+      description: 金额，单位为澳元分。39 元写成 3900。字段名统一以 Cents 结尾
+      examples:
+        - 3900
+    DateTime:
+      type: string
+      format: date-time
+      pattern: 'Z$'
+      description: UTC 时间点，ISO 8601 格式，以 Z 结尾。前端按城市时区显示
+      examples:
+        - '2026-11-01T03:30:00Z'
+    LocalDate:
+      type: string
+      format: date
+      description: 城市当地的日期，YYYY-MM-DD
+      examples:
+        - '2026-11-02'
+    ClockTime:
+      type: string
+      pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      description: 钟点，HH:mm，24 小时制
+      examples:
+        - '08:00'
+    Version:
+      type: integer
+      minimum: 0
+      description: 数据版本号。编辑时原样提交，不一致时返回 VERSION_CONFLICT
+      examples:
+        - 3
+
+    # ---------- 图片 ----------
+
+    ImageKey:
+      type: string
+      minLength: 1
+      description: 图片在 S3 中的对象 key。数据库只保存 key
+      examples:
+        - prod/product/2026/11/01/abc.jpg
+    Image:
+      type: object
+      description: 接口返回的图片。显示时直接使用 url，不要自己拼接地址
+      required: [key, url, width, height]
+      properties:
+        key:
+          $ref: '#/components/schemas/ImageKey'
+        url:
+          type: string
+          format: uri
+          description: 经 CloudFront 分发、可直接访问的地址
+        width:
+          type: integer
+          minimum: 1
+          description: 宽度（像素）
+        height:
+          type: integer
+          minimum: 1
+          description: 高度（像素）
+    ImageInput:
+      type: object
+      description: 提交给业务接口的图片。key 来自上传接口，宽高由前端读取
+      required: [key, width, height]
+      properties:
+        key:
+          $ref: '#/components/schemas/ImageKey'
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+
+    # ---------- 响应包装 ----------
+
+    OkResponse:
+      type: object
+      description: 成功响应。各接口用 allOf 指定 data 的结构，见文件开头的示例
+      required: [ok, data]
+      properties:
+        ok:
+          const: true
+        data:
+          description: 对象或数组；没有内容返回时为 null
+    ErrorResponse:
+      type: object
+      description: 失败响应。前端以 code 判断错误类型，message 可以直接提示给用户
+      required: [ok, code, message]
+      properties:
+        ok:
+          const: false
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 中文说明
+        details:
+          type: array
+          description: 参数校验失败时，列出每个出错字段和原因
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: 出错的字段名（camelCase）
+        message:
+          type: string
+          description: 中文原因
+    ErrorCode:
+      type: string
+      description: |
+        错误码，与 docs/api/conventions.md 第 9 节一致。
+        需要新的错误码时，先加到 conventions.md，再加到这里。
+      enum:
+        # 通用
+        - VALIDATION_FAILED
+        - NEED_LOGIN
+        - FORBIDDEN
+        - NOT_FOUND
+        - INVALID_STATUS
+        - VERSION_CONFLICT
+        - INTERNAL_ERROR
+        # 管理端
+        - BAD_PASSWORD
+        - NAME_DUPLICATED
+        - CATEGORY_IN_USE
+        - STOCK_BELOW_LOCKED
+        - LAST_SLOT
+        - LISTING_NOT_ON_SALE
+        - REFUND_PAYOUT_FAILED
+        - UPLOAD_NOT_ALLOWED
+
+    # ---------- 分页 ----------
+
+    PageMeta:
+      type: object
+      description: 分页信息。分页列表的 data 由它和 items 组成，见文件开头的示例
+      required: [total, page, pageSize]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: 总条数
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    # ---------- 跨模块共用的业务结构 ----------
+
+    UserBrief:
+      type: object
+      description: 用户简要信息。只有 ID 和昵称，不含手机号等隐私信息
+      required: [id, nickname]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        nickname:
+          type: string
+    Fulfillment:
+      type: string
+      description: |
+        配送方式
+        - local：线下配送
+        - post：快递
+      enum: [local, post]
+
+    # ===== 公共部分结束 =====
+
+    # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
+
+    # ===== A 区块结束 =====
+
+    # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
+
+    # ===== B 区块结束 =====
+
+    # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
+
+    # ===== C 区块结束 =====
