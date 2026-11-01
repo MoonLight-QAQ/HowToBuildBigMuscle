@@ -210,6 +210,254 @@ paths:
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
 
+  # ---------- 登录 ----------
+
+  /login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: 管理员登录
+      description: |
+        账号加密码登录，与顾客的微信登录分开。登录成功返回 token 和过期时间。
+        登录失败统一返回 BAD_PASSWORD，不区分是账号错还是密码错。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResult'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          description: BAD_PASSWORD（账号或密码错误）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                code: BAD_PASSWORD
+                message: 账号或密码错误
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------- 闲置类目 ----------
+
+  /flea-categories:
+    get:
+      tags: [flea-category]
+      operationId: listFleaCategories
+      summary: 闲置类目列表
+      description: 只给闲置发布页用，和商城类目分开。数量很少，不分页，按 sort 排序。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/FleaCategory'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [flea-category]
+      operationId: createFleaCategory
+      summary: 新增闲置类目
+      description: 中文名和英文名都不能与已有的闲置类目重复。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FleaCategoryInput'
+      responses:
+        '200':
+          description: 成功，返回新建的类目
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FleaCategory'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有闲置类目重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /flea-categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    delete:
+      tags: [flea-category]
+      operationId: deleteFleaCategory
+      summary: 删除闲置类目
+      description: 还有在售帖子使用这个类目时不能删除（inUseCount 大于 0）。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: CATEGORY_IN_USE（还有在售帖子使用这个类目）
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------- 闲置 ----------
+
+  /listings:
+    get:
+      tags: [listing]
+      operationId: listListings
+      summary: 闲置帖子列表（封面墙）
+      description: |
+        包含在售、已出、卖家自己下架、强制下架的全部帖子，按发布时间从新到旧排列。
+        本接口不改变「已浏览」标记，只有打开详情才记为已浏览。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          required: false
+          description: 按状态筛选，不传则返回全部
+          schema:
+            $ref: '#/components/schemas/ListingStatusFilter'
+        - name: cityId
+          in: query
+          required: false
+          description: 按城市筛选，不传则返回全部城市
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: seen
+          in: query
+          required: false
+          description: false 只返回未浏览的帖子，true 只返回已浏览的帖子，不传则返回全部
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PageMeta'
+                          - type: object
+                            required: [items]
+                            properties:
+                              items:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/ListingListItem'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /listings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [listing]
+      operationId: getListing
+      summary: 查看帖子
+      description: |
+        返回帖子详情，并把这条帖子的当前内容版本记为已浏览（全店一份，不按管理员分别记录）。
+        返回的 seen 是本次打开之后的状态，因此总是 true；
+        contentChangedSinceSeen 是本次打开之前的状态，前端据此说明「卖家修改过内容，这次重新记为已浏览」。
+        不返回卖家的手机号和微信号。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ListingDetail'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /listings/{id}/remove:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [listing]
+      operationId: removeListing
+      summary: 强制下架帖子
+      description: |
+        只有在售（on_sale）的帖子可以强制下架，状态变为 admin_removed。
+        原因必填，卖家能在自己的帖子里看到。下架不影响「已浏览」标记。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveListingRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: LISTING_NOT_ON_SALE（帖子不是在售状态，不能强制下架）
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   # ===== C 区块结束 =====
 
 components:
@@ -523,5 +771,270 @@ components:
     # ===== B 区块结束 =====
 
     # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
+
+    # ---------- 登录 ----------
+
+    Admin:
+      type: object
+      description: 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改
+      required: [id, account]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        account:
+          type: string
+          maxLength: 32
+          description: 登录账号
+    LoginRequest:
+      type: object
+      required: [account, password]
+      properties:
+        account:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: 登录账号
+        password:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 密码。长度上限为建议值
+    LoginResult:
+      type: object
+      required: [token, expiresAt, admin]
+      properties:
+        token:
+          type: string
+          description: '管理员 token，放在请求头中：`Authorization: Bearer <token>`'
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        admin:
+          $ref: '#/components/schemas/Admin'
+
+    # ---------- 闲置类目 ----------
+
+    FleaCategory:
+      type: object
+      description: 闲置类目。与商城类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改
+      required: [id, nameZh, nameEn, sort, inUseCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 中文名，不能重复
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 英文名，不能重复
+        sort:
+          type: integer
+          description: 排序值，数字小的排在前面
+        inUseCount:
+          type: integer
+          minimum: 0
+          description: 使用这个类目的在售帖子数。大于 0 时不能删除，前端据此禁用删除按钮
+    FleaCategoryInput:
+      type: object
+      description: 新增闲置类目时提交的内容
+      required: [nameZh, nameEn, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        sort:
+          type: integer
+
+    # ---------- 闲置 ----------
+
+    ListingStatus:
+      type: string
+      description: |
+        闲置帖子状态。举报模块（A 区块）也引用本定义
+        - on_sale：在售
+        - sold：已出（卖家标记）
+        - self_removed：已下架（卖家自己下架）
+        - admin_removed：已下架（店员强制下架，必须有原因）
+      enum: [on_sale, sold, self_removed, admin_removed]
+    ListingStatusFilter:
+      type: string
+      description: |
+        闲置列表的状态筛选项
+        - on_sale：在售
+        - sold：已出
+        - removed：已下架，同时包含 self_removed 和 admin_removed
+      enum: [on_sale, sold, removed]
+    ListingCondition:
+      type: string
+      description: |
+        成色
+        - brand_new：全新
+        - like_new：几乎全新
+        - lightly_used：轻微使用
+        - well_used：明显使用
+      enum: [brand_new, like_new, lightly_used, well_used]
+    ContactRequestStatus:
+      type: string
+      description: |
+        联系方式申请状态。由卖家在小程序中处理，后台只读
+        - pending：待处理
+        - approved：已同意
+        - rejected：已拒绝（只拒绝这一次，对方可以再申请）
+        - blocked：已拒绝此人（对方不能再申请这条帖子）
+      enum: [pending, approved, rejected, blocked]
+    ListingListItem:
+      type: object
+      description: 闲置列表（封面墙）中的一条帖子。帖子由用户在小程序中发布，后台不能修改内容
+      required:
+        - id
+        - seller
+        - cityId
+        - cityNameZh
+        - categoryId
+        - categoryNameZh
+        - title
+        - priceCents
+        - negotiable
+        - condition
+        - status
+        - removeReason
+        - cover
+        - imageCount
+        - seen
+        - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        seller:
+          $ref: '#/components/schemas/UserBrief'
+        cityId:
+          $ref: '#/components/schemas/Id'
+        cityNameZh:
+          type: string
+        categoryId:
+          $ref: '#/components/schemas/Id'
+        categoryNameZh:
+          type: string
+        title:
+          type: string
+          maxLength: 40
+        priceCents:
+          $ref: '#/components/schemas/Cents'
+        negotiable:
+          type: boolean
+          description: 可小议
+        condition:
+          $ref: '#/components/schemas/ListingCondition'
+        status:
+          $ref: '#/components/schemas/ListingStatus'
+        removeReason:
+          type: [string, 'null']
+          maxLength: 200
+          description: 强制下架的原因。不是 admin_removed 时为 null
+        cover:
+          $ref: '#/components/schemas/Image'
+        imageCount:
+          type: integer
+          minimum: 1
+          maximum: 9
+          description: 图片总数
+        seen:
+          type: boolean
+          description: 是否已浏览：当且仅当已浏览的版本等于当前内容版本。全店一份，不按管理员分别记录
+        createdAt:
+          $ref: '#/components/schemas/DateTime'
+    ListingDetail:
+      description: 帖子详情。在列表字段的基础上，增加正文、全部图片、评论和联系方式申请
+      allOf:
+        - $ref: '#/components/schemas/ListingListItem'
+        - type: object
+          required: [description, images, contentChangedSinceSeen, comments, contactRequests]
+          properties:
+            description:
+              type: string
+              maxLength: 300
+            images:
+              type: array
+              minItems: 1
+              maxItems: 9
+              description: 全部图片，第一张是封面
+              items:
+                $ref: '#/components/schemas/Image'
+            contentChangedSinceSeen:
+              type: boolean
+              description: 曾被浏览过、但卖家之后修改了内容（本次打开之前的状态）
+            comments:
+              type: array
+              description: 按时间正序
+              items:
+                $ref: '#/components/schemas/Comment'
+            contactRequests:
+              type: array
+              description: 按时间正序
+              items:
+                $ref: '#/components/schemas/ContactRequest'
+    Comment:
+      type: object
+      description: 帖子下的评论。回复只有一层
+      required: [id, user, parentId, content, deleted, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        user:
+          $ref: '#/components/schemas/UserBrief'
+        parentId:
+          description: 回复的评论。直接评论帖子时为 null
+          anyOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+        content:
+          type: string
+          maxLength: 200
+          description: deleted 为 true 时为空字符串
+        deleted:
+          type: boolean
+          description: 已被作者删除。页面显示「该评论已删除」
+        createdAt:
+          $ref: '#/components/schemas/DateTime'
+    ContactRequest:
+      type: object
+      description: |
+        联系方式申请（后台视角）。只展示卖家已经做出的处理结果，后台不能替卖家同意或拒绝。
+        不包含卖家的手机号和微信号。
+      required: [id, buyer, note, status, attemptNo, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        buyer:
+          $ref: '#/components/schemas/UserBrief'
+        note:
+          type: [string, 'null']
+          maxLength: 100
+          description: 附言
+        status:
+          $ref: '#/components/schemas/ContactRequestStatus'
+        attemptNo:
+          type: integer
+          minimum: 1
+          description: 同一人对这条帖子的第几次申请
+        createdAt:
+          $ref: '#/components/schemas/DateTime'
+    RemoveListingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: 强制下架的原因，卖家能看到。去掉首尾空格后不能为空
 
     # ===== C 区块结束 =====
