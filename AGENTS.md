@@ -64,7 +64,7 @@ Go 工程的模块路径为 `github.com/MoonLight-QAQ/HowToBuildBigMuscle/backen
 | 响应格式 | 成功：`{ "ok": true, "data": ... }`；失败：`{ "ok": false, "code": "ERROR_CODE", "message": "..." }` |
 | ID | 雪花 ID，**一律用字符串传输**（超出 JavaScript 数字精度） |
 | 金额 | 整数，单位为**分**（澳元分）。前端显示时再转换为元 |
-| 时间 | ISO 8601 格式，带时区偏移，如 `2026-11-01T14:30:00+11:00` |
+| 时间 | ISO 8601 格式，统一为 UTC，如 `2026-11-01T03:30:00Z`；前端按城市时区显示 |
 | 双语字段 | 字段名后缀 `Zh` 和 `En`，如 `nameZh`、`nameEn` |
 | 字段命名 | JSON 用 camelCase；数据库用 snake_case |
 
