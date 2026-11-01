@@ -1,0 +1,12 @@
+# 从契约生成的类型，禁止手动修改，也不格式化
+src/api/generated/
+
+# 由 MSW 生成，禁止修改
+public/mockServiceWorker.js
+
+# Markdown 文档沿用仓库统一的紧凑写法，不交给 Prettier 格式化
+*.md
+
+# 构建产物和锁文件
+dist/
+pnpm-lock.yaml
