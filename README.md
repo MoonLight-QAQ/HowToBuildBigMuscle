@@ -47,8 +47,10 @@
 macOS 用户：
 
 ```bash
-brew install git gh node pnpm lefthook
+brew install git gh fnm lefthook
 ```
+
+**不要用 Homebrew 安装 node 和 pnpm**，各工程的版本已经固定。Node 用 fnm 安装，pnpm 用 corepack 启用，步骤见 `CONTRIBUTING.md` 第一部分的「2. 配置 Node.js 和 pnpm」。
 
 再安装 AI 编码工具，**Claude Code 或 Codex 二选一**，以及编辑器（GoLand 或 VS Code）。
 
@@ -84,6 +86,7 @@ lefthook install
 
 | 验证 | 操作 | 预期结果 |
 | --- | --- | --- |
+| Node 和 pnpm 版本正确 | `cd frontend/web && node -v && pnpm -v` | 分别与 `.node-version`、`package.json` 的 `packageManager` 一致 |
 | lefthook 生效 | `git checkout develop && git commit --allow-empty -m test` | 被拦截，提示不能在 develop 上提交 |
 | Claude Code 读到规则 | 在 Claude Code 中问「这个仓库有哪些硬规则」 | 能列出 `AGENTS.md` 中的规则 |
 | Claude Code 权限生效 | 输入 `/permissions` | 能看到禁止读取密钥等规则 |
