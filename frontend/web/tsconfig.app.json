@@ -5,6 +5,16 @@
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,
 
+    /* 路径别名：@ 指向 src/，Vite 中的同名别名见 vite.config.ts */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    /* 严格模式：@vue/tsconfig 已开启 strict，这里显式写出，便于查看 */
+    "strict": true,
+    /* 数组和对象按下标取值时，类型带上 undefined，必须先判断再使用 */
+    "noUncheckedIndexedAccess": true,
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
