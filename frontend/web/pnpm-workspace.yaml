@@ -3,3 +3,9 @@
 # 只安装发布满 7 天（10080 分钟）的版本，包括间接依赖。
 # 刚发布的版本可能有问题或被投毒，等社区验证几天再用。
 minimumReleaseAge: 10080
+
+# 依赖包的安装脚本默认不运行，每个需要运行脚本的包都要在这里明确允许（true）或拒绝（false），
+# 否则 pnpm install 会报错退出。新增依赖时如果遇到 ERR_PNPM_IGNORED_BUILDS，在这里补上。
+allowBuilds:
+  # sass 的可选依赖，只在命令行执行 sass --watch 时使用，Vite 编译 SCSS 用不到
+  '@parcel/watcher': false
