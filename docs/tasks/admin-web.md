@@ -22,7 +22,7 @@
 flowchart LR
     W00a[W-00a 契约框架] --> W00b[W-00b A 的接口] & W00c[W-00c B 的接口] & W00d[W-00d C 的接口]
     W00a --> W01a[W-01a 工程初始化]
-    W01a --> W01b[W-01b 请求与模拟] & W01c[W-01c 路由与布局] & W01d[W-01d 通用组件] & W01e[W-01e CI 流水线]
+    W01a --> W01b[W-01b 请求与模拟] & W01c[W-01c 路由与布局] & W01d[W-01d 通用组件] & W01e[W-01e CI 流水线] & W01f[W-01f 环境配置文档]
     W01b & W01c & W01d --> W02[W-02 城市 示例]
     W01b & W01c & W01d --> W03[W-03 登录]
     W02 --> W04[W-04 商城类目] --> W05[W-05 商品]
@@ -35,7 +35,7 @@ flowchart LR
     classDef c fill:#dcfce7,stroke:#15803d,color:#000
     classDef todo fill:#eeeeee,stroke:#888,color:#000,stroke-dasharray:4 3
     class W00b,W01b,W01d,W09,W10,W11,W12 a
-    class W00a,W00c,W01a,W02,W04,W05,W06 b
+    class W00a,W00c,W01a,W01f,W02,W04,W05,W06 b
     class W00d,W01c,W03,W07,W08 c
     class W01e todo
 ```
@@ -57,7 +57,7 @@ flowchart LR
 
 ## 二、工程骨架与共享区域
 
-以下路径都位于 `frontend/web/` 下，W-01e 除外。
+以下路径都位于 `frontend/web/` 下，W-01e、W-01f 除外。
 
 | ID | 内容 | 范围 | 负责人 | 依赖 |
 | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ flowchart LR
 | W-01c | 路由、布局与登录状态 | `src/router/`、`src/layouts/`、`src/stores/` | @celine-hy | W-01a |
 | W-01d | 通用组件与工具，以及它们的单元测试 | `src/components/`、`src/composables/`、`src/utils/` | @RealninX | W-01a |
 | W-01e | CI 流水线：前端检查、PR 来源分支检查、锁定目录检查、依赖更新 | 仓库根目录下的 `.github/workflows/`、`.github/dependabot.yml`、`.github/repo-settings/` | **待分配** | W-01a |
+| W-01f | 环境配置文档：`CONTRIBUTING.md` 和根目录 `README.md` 中 Node、pnpm 的安装方法与工程固定的版本对齐 | 仓库根目录下的 `CONTRIBUTING.md`、`README.md` 中与 Node、pnpm 有关的部分 | @MoonLight-QAQ | W-01a |
 
 ## 三、业务模块
 
@@ -90,7 +91,7 @@ flowchart LR
 | 成员 | 契约 | 骨架 | 业务模块 |
 | --- | --- | --- | --- |
 | A @RealninX | W-00b | W-01b、W-01d | W-09、W-10、W-11、W-12 |
-| B @MoonLight-QAQ | W-00a、W-00c | W-01a | W-02、W-04、W-05、W-06 |
+| B @MoonLight-QAQ | W-00a、W-00c | W-01a、W-01f | W-02、W-04、W-05、W-06 |
 | C @celine-hy | W-00d | W-01c | W-03、W-07、W-08 |
 | 待分配 | — | W-01e | — |
 
