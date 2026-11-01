@@ -7,3 +7,20 @@
 # 示例：
 # frontend/web/src/views/city/
 # frontend/web/src/api/city.ts
+
+# W-01a 工程初始化
+# 不锁定 package.json、pnpm-lock.yaml（各任务新增依赖时要改）、
+# src/main.ts、src/App.vue（W-01b、W-01c 要在标注位置修改）、
+# .env.*、env.d.ts（新增环境变量时要改）、README.md
+frontend/web/src/styles/
+frontend/web/vite.config.ts
+frontend/web/vitest.config.ts
+frontend/web/tsconfig.json
+frontend/web/tsconfig.app.json
+frontend/web/tsconfig.node.json
+frontend/web/eslint.config.ts
+frontend/web/.prettierrc.json
+frontend/web/.prettierignore
+frontend/web/pnpm-workspace.yaml
+frontend/web/.node-version
+frontend/web/index.html
