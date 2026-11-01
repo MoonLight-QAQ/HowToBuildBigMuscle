@@ -357,18 +357,19 @@ paths:
           description: 按状态筛选，不传则返回全部
           schema:
             $ref: '#/components/schemas/ListingStatusFilter'
-        - name: cityId
+        - name: city
           in: query
           required: false
-          description: 按城市筛选，不传则返回全部城市
+          description: 按城市筛选，传城市 ID。不传则返回全部城市
           schema:
             $ref: '#/components/schemas/Id'
         - name: seen
           in: query
           required: false
-          description: false 只返回未浏览的帖子，true 只返回已浏览的帖子，不传则返回全部
+          description: 传 0 只返回未浏览的帖子，不传则返回全部
           schema:
-            type: boolean
+            type: integer
+            enum: [0]
       responses:
         '200':
           description: 成功
