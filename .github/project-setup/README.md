@@ -40,12 +40,12 @@ python3 .github/project-setup/setup_project.py
 
 | 步骤 | 内容 |
 | --- | --- |
-| 1 | 检查 GitHub CLI 是否已登录，是否有 Project 权限 |
+| 1 | 检查 GitHub CLI 是否已登录、是否有 Project 权限，以及每位负责人能否被分配任务 |
 | 2 | 创建 6 个标签：`task`、`admin-web`、`contract`、`skeleton`、`module`、`unlock` |
 | 3 | 创建看板「拾澳 · 管理后台前端」，并关联到本仓库 |
 | 4 | 在看板上创建 3 个字段：开始日期、截止日期、估算天数 |
 | 5 | 为每个任务创建一个 issue，分配负责人，加上标签，加入看板 |
-| 6 | 为新创建的任务填写状态（`Todo`）、开始日期、截止日期、估算天数 |
+| 6 | 为每个新任务填写状态（`Todo`）、开始日期、截止日期、估算天数（在第 5 步创建后立即填写） |
 
 ## 可以重复执行吗
 
@@ -80,10 +80,40 @@ python3 .github/project-setup/setup_project.py
 
 执行 `gh auth refresh -s project`，在浏览器中授权后，重新运行脚本。
 
-**提示 `could not assign user`**
+**提示「以下成员还不能被分配任务」**
 
-被分配的成员还没有接受仓库的协作邀请。请对方先在邮箱或 GitHub 通知中接受邀请，再重新运行脚本。已经创建的 issue 不会重复创建。
+GitHub 只允许把 issue 分配给仓库的协作者。出现这个提示，通常是对方还不是协作者，或者收到了邀请但还没有接受。按顺序检查：
+
+```bash
+# 1. 用户名是否正确（应原样输出用户名）
+gh api users/celine-hy --jq .login
+
+# 2. 已经是协作者的人
+gh api repos/MoonLight-QAQ/HowToBuildBigMuscle/collaborators --jq '.[].login'
+
+# 3. 已邀请、但还没接受的人
+gh api repos/MoonLight-QAQ/HowToBuildBigMuscle/invitations --jq '.[].invitee.login'
+```
+
+| 结果 | 处理 |
+| --- | --- |
+| 在第 3 条的结果里 | 请对方打开 `https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/invitations` 接受邀请 |
+| 第 2、3 条的结果里都没有 | 管理员在仓库 Settings → Collaborators → Add people 中邀请对方，再请对方接受 |
+
+对方接受后，重新运行脚本即可。脚本会在创建任何 issue **之前**做这项检查，所以不会出现只建了一半的情况。
 
 **执行到一半报错了**
 
 修复报错的原因后，直接重新执行。已完成的部分会被跳过。
+
+每个任务在创建后会**立即**填写状态和日期，所以中途失败时，已经创建的任务不会缺少字段。
+
+**有任务缺少状态或日期**
+
+用 `--refill` 指定这些任务的 ID，重新填写：
+
+```bash
+python3 .github/project-setup/setup_project.py --refill W-00a,W-00b,W-00c
+```
+
+`--refill` 会用 `tasks-admin-web.json` 中的计划日期覆盖这些任务在看板上的状态和日期。只用于补救，不要用于已经开始的任务。

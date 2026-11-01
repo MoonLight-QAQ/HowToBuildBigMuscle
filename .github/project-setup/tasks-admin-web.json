@@ -24,7 +24,7 @@
       "refs": ["docs/prd/admin-prd.md 第 7～11 节", "docs/design/admin-data-dictionary.md"]
     },
     {
-      "id": "W-00d", "title": "C 的模块接口：登录、闲置类目、闲置", "area": "contract", "assignee": "Yue0131",
+      "id": "W-00d", "title": "C 的模块接口：登录、闲置类目、闲置", "area": "contract", "assignee": "celine-hy",
       "depends": ["W-00a"], "estimateDays": 2, "start": "2026-11-03", "end": "2026-11-04",
       "content": "在契约中 C 的区块内，编写登录、闲置类目、闲置的全部接口。",
       "scope": ["docs/api/admin.openapi.yaml 中 C 的区块"],
@@ -45,7 +45,7 @@
       "refs": ["frontend/web/AGENTS.md 的「接口调用」一节", "docs/api/conventions.md"]
     },
     {
-      "id": "W-01c", "title": "路由、布局与登录状态", "area": "skeleton", "assignee": "Yue0131",
+      "id": "W-01c", "title": "路由、布局与登录状态", "area": "skeleton", "assignee": "celine-hy",
       "depends": ["W-01a"], "estimateDays": 2, "start": "2026-11-05", "end": "2026-11-06",
       "content": "路由表框架、登录守卫、后台布局（左侧导航加内容区）、登录信息存储。",
       "scope": ["frontend/web/src/router/", "frontend/web/src/layouts/", "frontend/web/src/stores/"],
@@ -73,7 +73,7 @@
       "refs": ["docs/prd/admin-prd.md 第 11 节", "docs/prototype/admin/"]
     },
     {
-      "id": "W-03", "title": "登录", "area": "module", "assignee": "Yue0131",
+      "id": "W-03", "title": "登录", "area": "module", "assignee": "celine-hy",
       "depends": ["W-01b", "W-01c", "W-01d"], "estimateDays": 1, "start": "2026-11-09", "end": "2026-11-09",
       "content": "登录页面，以及与登录守卫的对接。",
       "scope": ["frontend/web/src/views/login/", "frontend/web/src/api/auth.ts", "frontend/web/src/mocks/handlers/auth.ts", "frontend/web/src/mocks/data/auth.ts"],
@@ -101,14 +101,14 @@
       "refs": ["docs/prd/admin-prd.md 第 10 节"]
     },
     {
-      "id": "W-07", "title": "闲置类目", "area": "module", "assignee": "Yue0131",
+      "id": "W-07", "title": "闲置类目", "area": "module", "assignee": "celine-hy",
       "depends": ["W-02"], "estimateDays": 1, "start": "2026-11-13", "end": "2026-11-13",
       "content": "闲置类目的列表、新增、删除。",
       "scope": ["frontend/web/src/views/flea-category/", "frontend/web/src/api/flea-category.ts", "frontend/web/src/mocks/handlers/flea-category.ts", "frontend/web/src/mocks/data/flea-category.ts"],
       "refs": ["docs/prd/admin-prd.md 第 14 节"]
     },
     {
-      "id": "W-08", "title": "闲置（封面墙、详情、已浏览、强制下架）", "area": "module", "assignee": "Yue0131",
+      "id": "W-08", "title": "闲置（封面墙、详情、已浏览、强制下架）", "area": "module", "assignee": "celine-hy",
       "depends": ["W-07"], "estimateDays": 3, "start": "2026-11-16", "end": "2026-11-18",
       "content": "闲置封面墙、帖子详情、已浏览标记、强制下架。",
       "scope": ["frontend/web/src/views/listing/", "frontend/web/src/api/listing.ts", "frontend/web/src/mocks/handlers/listing.ts", "frontend/web/src/mocks/data/listing.ts"],
