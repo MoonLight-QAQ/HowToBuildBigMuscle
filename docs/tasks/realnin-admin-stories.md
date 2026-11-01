@@ -6,7 +6,7 @@
 
 | Story | 本次范围 | 既有 Issue | 分支 |
 |---|---|---|---|
-| W-00b | 订单、退款、概览、举报的契约草案与生成类型 | [#17](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/17) | `feat/docs-realnin-admin-contract` |
+| W-00b | 订单、退款、概览、举报契约及对应字段/需求对齐，不提交生成类型 | [#17](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/17) | `feat/docs-realnin-admin-contract` |
 | W-01b | 统一请求、认证接入点、错误归一化、Mock基础与类型生成检查 | [#21](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/21) | `feat/fe-web-realnin-request-mock` |
 | W-01d | 金额/时间工具、通用组件、组合式函数及测试 | [#23](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/23) | `feat/fe-web-realnin-common-ui` |
 | W-10 | 订单列表、详情、开始配送/寄出、标记送达 | [#33](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/33) | `feat/fe-web-realnin-orders` |
