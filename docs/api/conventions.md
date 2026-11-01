@@ -158,11 +158,24 @@
 
 ### 图片
 
-- 图片上传到 OSS，提交给接口的是对象 `key`。
-- 接口返回图片时，同时返回 `key`、完整的 `url`，以及 `width`、`height`（用于瀑布流排版）：
-  ```json
-  { "key": "prod/product/2026/11/01/abc.jpg", "url": "https://...", "width": 1080, "height": 1440 }
-  ```
+图片存放在 **AWS S3**，由前端直接上传，不经过后端中转：
+
+1. 前端调用本端的上传接口（如 `POST /api/admin/uploads/presign`），告诉后端文件用途、类型和大小。
+2. 后端校验后，返回一个有时效的**预签名上传地址** `uploadUrl` 和对象 `key`。
+3. 前端用 `PUT` 把文件直接上传到 `uploadUrl`。
+4. 前端读取图片的宽高，和 `key` 一起提交给业务接口：
+   ```json
+   { "key": "prod/product/2026/11/01/abc.jpg", "width": 1080, "height": 1440 }
+   ```
+
+接口返回图片时，同时返回 `key`、可直接访问的 `url`（经 CloudFront 分发），以及 `width`、`height`（用于瀑布流排版）：
+
+```json
+{ "key": "prod/product/2026/11/01/abc.jpg", "url": "https://...", "width": 1080, "height": 1440 }
+```
+
+- 前端显示图片时**直接使用 `url`**，不要自己拼接地址。
+- 数据库只保存 `key`，不保存完整地址。以后更换域名或 CDN 时，只需修改配置。
 
 ## 8. 并发与重复提交
 
@@ -195,7 +208,7 @@
 | `LAST_SLOT` | 409 | 至少要保留一个送达时段 | PRD 第 10 节 |
 | `LISTING_NOT_ON_SALE` | 409 | 帖子不是在售状态，不能强制下架 | PRD 第 13 节 |
 | `REFUND_PAYOUT_FAILED` | 502 | 向微信发起退款失败，退款单保持待审，可以重试【建议】 | PRD 第 6.1 节 |
-| `UPLOAD_NOT_ALLOWED` | 400 | 图片类型或大小不符合要求【建议】 | — |
+| `UPLOAD_NOT_ALLOWED` | 400 | 申请上传地址时，图片类型或大小不符合要求【建议】 | — |
 
 ### 小程序端（供参考，以小程序契约为准）
 
@@ -212,4 +225,4 @@
 - 每个接口有 `operationId`，用 camelCase 的「动词 + 名词」：`listOrders`、`getOrder`、`startOrderDelivery`。前端生成的函数和类型以此命名。
 - 公共结构（响应包装、分页、错误、图片、金额等）定义在 `components/schemas` 中，各模块引用，不要重复定义。
 - 每个接口都写出可能返回的错误码。
-- `admin.openapi.yaml` 按负责人划分区块，每人只在自己的区块内修改，见 `../tasks/admin-web.md` 的 W-00 系列任务。
+- `admin.openapi.yaml` 按负责人划分区块，每人只在自己的区块内修改，见 `docs/tasks/admin-web.md` 的 W-00 系列任务。

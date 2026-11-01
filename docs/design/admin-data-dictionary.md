@@ -5,7 +5,7 @@
 - 写接口契约 `docs/api/admin.openapi.yaml` 时，字段以本文件为准。
 - 以后设计数据库表时，也从本文件出发。
 - 字段名是**接口中的名字**（camelCase）。数据库中的名字在表设计阶段确定。
-- 通用的类型约定（ID、金额、时间、双语、图片、空值）见 `../api/conventions.md`，本文件不再重复。
+- 通用的类型约定（ID、金额、时间、双语、图片、空值）见 `docs/api/conventions.md`，本文件不再重复。
 
 依据：`docs/prd/admin-prd.md`（管理后台），以及 `docs/prd/mini-prd.md` 第 5、9 节（订单状态与数据表）。订单、退款、闲置的数据由小程序产生，字段与小程序保持一致。
 
@@ -26,7 +26,7 @@
 | `datetime` | UTC 时间点 |
 | `date` | 城市当地日期 `YYYY-MM-DD` |
 | `time` | 钟点 `HH:mm` |
-| `Image` | 图片对象 `{ key, url, width, height }` |
+| `Image` | 图片对象。返回时为 `{ key, url, width, height }`；提交时为 `{ key, width, height }`，见 `docs/api/conventions.md` |
 | `?` | 后缀 `?` 表示可以为 `null` |
 
 「来源」一列：**录入**表示由店员在后台填写；**计算**表示由服务器计算，前端只展示，不提交；**快照**表示下单时抄下来、之后不再变化；**小程序**表示由用户在小程序中产生，后台只读。
@@ -505,4 +505,4 @@ CommentBrief：`{ id, content, deleted }`。
 | 类目能否改名 | PRD 只写了新增和删除 |
 | 城市能否删除 | PRD 只写了新增和修改 |
 | 各字段的长度上限 | PRD 只规定了部分字段，其余为建议值 |
-| 金额字段以 `Cents` 结尾 | 见 `../api/conventions.md` |
+| 金额字段以 `Cents` 结尾 | 见 `docs/api/conventions.md` |
