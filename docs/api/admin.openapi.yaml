@@ -949,7 +949,10 @@ components:
           description: 图片总数
         seen:
           type: boolean
-          description: 是否已浏览：当且仅当已浏览的版本等于当前内容版本。全店一份，不按管理员分别记录
+          description: |
+            是否已浏览：当且仅当已浏览的版本号等于当前内容版本号。全店一份，不按管理员分别记录。
+            卖家改了标题、描述、图片、标价、是否可小议、成色、类目或城市，内容版本加 1，已浏览去掉。
+            评论、回复、联系方式申请和处理、标已出、自己下架、强制下架、举报，都不加版本，标记留着。
         createdAt:
           $ref: '#/components/schemas/DateTime'
     ListingDetail:
@@ -1036,6 +1039,7 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-          description: 强制下架的原因，卖家能看到。去掉首尾空格后不能为空
+          pattern: '\S'
+          description: 强制下架的原因，卖家能看到。去掉首尾空格后不能为空（至少有一个非空白字符）
 
     # ===== C 区块结束 =====
