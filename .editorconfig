@@ -1,0 +1,25 @@
+# 统一编辑器的基础格式。GoLand、VS Code 等都会自动读取本文件。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Go 使用 Tab 缩进（与 gofmt 一致）
+[*.go]
+indent_style = tab
+indent_size = 4
+
+[{Makefile,*.mk}]
+indent_style = tab
+
+# Markdown 中行尾两个空格表示换行，不能删除
+[*.md]
+trim_trailing_whitespace = false
+
+[*.sh]
+indent_size = 2

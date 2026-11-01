@@ -1,0 +1,63 @@
+# 提交前的本地检查。对所有人、所有 AI 工具生效。
+# 克隆仓库后执行一次：lefthook install
+# 不要使用 git commit --no-verify 跳过检查。
+
+pre-commit:
+  parallel: false
+  commands:
+    # 1. 禁止在 develop 和 main 上直接提交
+    protect-branch:
+      run: |
+        branch="$(git branch --show-current)"
+        if [ "$branch" = "develop" ] || [ "$branch" = "main" ]; then
+          echo "❌ 当前在 $branch 分支上，不能直接提交。"
+          echo "   请先创建功能分支：git checkout -b feat/范围-描述"
+          exit 1
+        fi
+
+    # 2. 禁止提交密钥、本地配置、IDE 和系统文件
+    forbidden-files:
+      run: |
+        bad="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.env|\.env\.local|\.env\..+\.local)$|\.local\.ya?ml$|\.(pem|key|p12|pfx|jks|keystore)$|(^|/)\.idea/|(^|/)\.vscode/|(^|/)\.DS_Store$' || true)"
+        if [ -n "$bad" ]; then
+          echo "❌ 以下文件不能提交（密钥、本地配置、IDE 或系统文件）："
+          echo "$bad"
+          echo "   请执行：git restore --staged <文件>"
+          exit 1
+        fi
+
+    # 3. 管理后台前端：格式化和 lint（工程搭建后生效）
+    fe-web-format:
+      root: "frontend/web/"
+      glob: "*.{ts,vue,js,json,scss,css}"
+      run: |
+        [ -f package.json ] || exit 0
+        pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+    fe-web-lint:
+      root: "frontend/web/"
+      glob: "*.{ts,vue,js}"
+      run: |
+        [ -f package.json ] || exit 0
+        pnpm exec eslint {staged_files}
+
+    # 4. 小程序前端（工程搭建后生效）
+    fe-mini-format:
+      root: "frontend/mini/"
+      glob: "*.{ts,vue,js,json,scss,css}"
+      run: |
+        [ -f package.json ] || exit 0
+        pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+
+    # 5. Go 后端：格式化（工程搭建后生效）
+    be-admin-format:
+      root: "backend/admin/"
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    be-mini-format:
+      root: "backend/mini/"
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
