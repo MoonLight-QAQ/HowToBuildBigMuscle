@@ -1,0 +1,9 @@
+# 已锁定的目录（任务完成后加入，默认不允许修改）
+#
+# 格式：每行一个路径，从仓库根目录开始写，目录以 / 结尾。
+# 以 # 开头的行是注释。
+# 修改锁定目录的流程见 docs/tasks/README.md。
+#
+# 示例：
+# frontend/web/src/views/city/
+# frontend/web/src/api/city.ts
