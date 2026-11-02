@@ -1,0 +1,49 @@
+// 主题变量
+//
+// 组件中直接使用，不需要导入：vite.config.ts 已把本文件注入到每个 <style lang="scss"> 中。
+// 因此本文件只能放变量，不能放任何会输出 CSS 的规则，否则每个组件都会重复输出一份。
+//
+// 颜色、圆角、字号引用 Element Plus 的 CSS 变量。以后换肤时，只需覆盖 Element Plus 的
+// CSS 变量（--el-color-primary 等），这里和页面代码都不用改。
+
+// ---------- 颜色 ----------
+
+$color-primary: var(--el-color-primary);
+$color-success: var(--el-color-success);
+$color-warning: var(--el-color-warning);
+$color-danger: var(--el-color-danger);
+$color-info: var(--el-color-info);
+
+// 文字
+$text-primary: var(--el-text-color-primary);
+$text-regular: var(--el-text-color-regular);
+$text-secondary: var(--el-text-color-secondary);
+$text-placeholder: var(--el-text-color-placeholder);
+
+// 背景与边框
+$bg-page: var(--el-bg-color-page);
+$bg-base: var(--el-bg-color);
+$border-color: var(--el-border-color);
+$border-color-light: var(--el-border-color-light);
+
+// ---------- 间距（4 的倍数） ----------
+
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 16px;
+$space-lg: 20px;
+$space-xl: 24px;
+
+// ---------- 圆角 ----------
+
+$radius-small: var(--el-border-radius-small);
+$radius-base: var(--el-border-radius-base);
+$radius-round: var(--el-border-radius-round);
+
+// ---------- 字号 ----------
+
+$font-size-small: var(--el-font-size-small);
+$font-size-base: var(--el-font-size-base);
+$font-size-medium: var(--el-font-size-medium);
+$font-size-large: var(--el-font-size-large);
+$font-size-title: var(--el-font-size-extra-large);

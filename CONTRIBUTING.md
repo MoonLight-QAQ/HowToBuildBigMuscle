@@ -21,8 +21,9 @@ AI 需要遵守的规则写在 `AGENTS.md` 中。两份文件内容一致，本�
 | --- | --- | --- |
 | Git | 版本管理 | 现在 |
 | GitHub CLI（`gh`） | 在终端创建 PR、执行仓库设置脚本 | 现在 |
-| Node.js（LTS 版本） | 前端运行环境 | 现在 |
-| pnpm | 前端包管理 | 现在 |
+| fnm | 管理 Node.js 版本，进入工程目录时自动切换 | 现在 |
+| Node.js | 前端运行环境。**版本以各工程的 `.node-version` 为准**，用 fnm 安装 | 现在 |
+| pnpm | 前端包管理。**版本以各工程 `package.json` 的 `packageManager` 为准**，用 corepack 启用，不要用 Homebrew 安装 | 现在 |
 | lefthook | 提交前的本地检查 | 现在 |
 | GoLand 或 VS Code | 编辑器 | 现在 |
 | Claude Code 或 Codex | AI 编码工具，二选一 | 现在 |
@@ -33,10 +34,41 @@ AI 需要遵守的规则写在 `AGENTS.md` 中。两份文件内容一致，本�
 macOS 可以用 Homebrew 安装：
 
 ```bash
-brew install git gh node pnpm lefthook
+brew install git gh fnm lefthook
 ```
 
-### 2. 配置 Git 提交身份
+**不要用 Homebrew 安装 node 和 pnpm。** Homebrew 总是安装最新版，每个人的版本会不一致，`brew upgrade` 还会让版本继续变化。各工程用的版本已经固定在工程目录中，按下一节配置。
+
+### 2. 配置 Node.js 和 pnpm
+
+**① 让 fnm 在进入目录时自动切换 Node 版本。** 在 `~/.zshrc` 末尾加入下面一行，然后重新打开终端：
+
+```bash
+eval "$(fnm env --use-on-cd)"
+```
+
+**② 安装工程要求的 Node 版本，并启用 pnpm。** 需要先克隆仓库（第 6 步），克隆后执行：
+
+```bash
+cd HowToBuildBigMuscle/frontend/web
+fnm install        # 按 .node-version 安装 Node
+corepack enable    # 启用 pnpm，版本由 package.json 的 packageManager 决定
+node -v            # 应与 .node-version 一致
+pnpm -v            # 应与 packageManager 中的版本一致
+```
+
+以后切换到其他版本的 Node 时（例如其他工程要求不同的版本），对新版本也要执行一次 `corepack enable`。更多说明和常见问题见 `frontend/web/README.md`。
+
+**以前用 Homebrew 装过 node 或 pnpm 的：**
+
+```bash
+brew uninstall pnpm     # 卸载，改由 corepack 提供
+which node              # 应显示 fnm 的路径（含 fnm_multishells），而不是 /opt/homebrew/bin/node
+```
+
+`brew` 安装的 node 可以保留，但 `which node` 必须指向 fnm 的版本。如果仍是 `/opt/homebrew/bin/node`，检查 `~/.zshrc` 中 fnm 那一行是否已经生效，或者执行 `brew uninstall node`。
+
+### 3. 配置 Git 提交身份
 
 GitHub 根据提交中的**邮箱**识别是谁的提交。邮箱必须已添加到你 GitHub 账号的 **Settings → Emails** 中。
 
@@ -58,14 +90,14 @@ git config --global includeIf."gitdir/i:~/GolandProjects/".path ~/.gitconfig-per
 
 在仓库目录中执行 `git config --show-origin user.email`，确认显示的是正确的邮箱。
 
-### 3. 登录 GitHub CLI
+### 4. 登录 GitHub CLI
 
 ```bash
 gh auth login       # 选择 GitHub.com → HTTPS → Login with a web browser
 gh auth setup-git   # 让 git 推送时使用 gh 的登录凭证
 ```
 
-### 4. 其他全局配置
+### 5. 其他全局配置
 
 ```bash
 # 自动清除已在远程删除的分支记录
@@ -76,7 +108,7 @@ echo ".DS_Store" >> ~/.gitignore_global
 git config --global core.excludesfile ~/.gitignore_global
 ```
 
-### 5. 克隆仓库并启用本地检查
+### 6. 克隆仓库并启用本地检查
 
 ```bash
 git clone https://github.com/MoonLight-QAQ/HowToBuildBigMuscle.git
@@ -84,9 +116,11 @@ cd HowToBuildBigMuscle
 lefthook install
 ```
 
+克隆完成后，回到第 2 步，完成「② 安装工程要求的 Node 版本，并启用 pnpm」。
+
 `lefthook install` **必须执行**。它会在每次提交前自动检查：是否在 `develop` 或 `main` 上提交、是否包含密钥或系统文件、代码格式和 lint 是否通过。
 
-### 6. 配置 AI 编码工具
+### 7. 配置 AI 编码工具
 
 **使用 Claude Code：**
 
@@ -98,7 +132,7 @@ lefthook install
 
 **使用 Codex：** 安装后在仓库根目录启动即可，它会自动读取 `AGENTS.md`。
 
-### 7. 开启 GitHub 两步验证
+### 8. 开启 GitHub 两步验证
 
 在 GitHub 的 **Settings → Password and authentication** 中开启。仓库是公开的，账号被盗的后果更严重。
 
