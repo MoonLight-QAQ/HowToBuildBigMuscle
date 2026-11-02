@@ -24,3 +24,13 @@ frontend/web/.prettierignore
 frontend/web/pnpm-workspace.yaml
 frontend/web/.node-version
 frontend/web/index.html
+
+# W-01b 请求与模拟（#21）
+# 后续契约重新生成、模块 handler 注册和常量扩展须按解锁流程审查。
+# main.ts 保持开放，供 W-01c 接入路由；不锁配置文件和 README。
+frontend/web/src/api/http.ts
+frontend/web/src/api/generated/
+frontend/web/src/mocks/browser.ts
+frontend/web/src/mocks/handlers/index.ts
+frontend/web/src/constants/
+frontend/web/src/types/

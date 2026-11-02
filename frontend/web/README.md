@@ -79,6 +79,19 @@ pnpm gen:api
 
 契约修改后要重新执行。生成的文件**不要手动修改**，lint 和 Prettier 也会跳过这个目录。
 
+## 请求与模拟接口（W-01b）
+
+- 模块 API 只调用 `src/api/http.ts` 导出的 `http.request('/资源', options)`；默认 GET，写入指定 `method` 和 `data`，筛选用 `params`。
+- `options.parse` 必填：先校验 `unknown` 数据，再转换成模块需要的结果。入参和结果类型引用生成类型，不直接用断言假装完成校验。请求层校验 JSON/响应包装并拆出 `data`，模块解析器负责业务对象字段校验。
+- `signal` 接收 `AbortController.signal`，页面卸载或请求过期时取消；请求层不自动重试，避免重复写入。
+- 错误为 `ApiError`：`kind` 区分业务、HTTP、网络、超时、取消、协议错误；服务端业务 `code` 原样保留，客户端故障的 `code` 为 null。`status` 为可用的 HTTP 状态，字段校验信息在 `details`。文案来自 `src/constants/error-code.ts`，不回显任意服务端消息，不保留带认证头的原始请求/响应。
+- W-01c 在创建登录 store/router 后调用 `http.setAuth({ getToken, onNeedLogin })`。每次请求读取当前管理员 token；`onNeedLogin` 负责清理登录并跳转。过期旧请求不会注销已更新的登录；同一失效 token 去重通知。登录请求指定 `anonymous: true`；`BAD_PASSWORD` 不触发全局注销。未接适配器时，`NEED_LOGIN` 默认跳转 `/login`。
+- 开发入口在挂载前动态启动 MSW 3，注册失败阻止挂载；生产入口不启动或导入 MSW。注册选项使用 `onUnhandledFrame`（不是 MSW 2 的 `onUnhandledRequest`），详见 [MSW 3 迁移说明](https://mswjs.io/docs/migrations/2.x-to-3.x)。
+- 模块 handler 在 `src/mocks/handlers/index.ts` 的最后兜底之前注册，数据用生成类型。尚未注册的管理接口返回契约错误，不透传到真实服务；测试 handler 仅在测试文件中，不进入应用接口契约。
+- worker 由 `pnpm exec msw init public --save` 生成，禁止手改。生产 `dist` 会保留这个静态文件，但入口不注册它，应用 JS 不包含 MSW 运行时代码。
+
+当前类型以 `develop` 已合入的契约为准。A/B/C 业务契约合并后，再运行 `pnpm gen:api`；不从尚未合并的 PR 复制接口。
+
 ## 依赖管理
 
 - **只用 pnpm**，不要用 npm 或 yarn，以免生成其他锁文件。
