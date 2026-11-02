@@ -195,10 +195,8 @@ tags:
   - name: listing
     description: 闲置
 
+# 注意：不要在 paths 下放任何 x- 开头的字段，生成类型时会被当成一个接口路径。
 paths:
-  # 以下两行是公共部分，保证 paths 在没有任何接口时也是合法的，不要删除。
-  x-blocks:
-    description: 接口按负责人分为 A、B、C 三个区块，见文件开头的说明。
 
   # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
 
