@@ -1,5 +1,10 @@
 import axios from 'axios'
-import { CLIENT_ERROR_MESSAGES, getErrorMessage } from '@/constants/error-code'
+import {
+  CLIENT_ERROR_MESSAGES,
+  ERROR_CODE,
+  getErrorMessage,
+  type ErrorDefinition,
+} from '@/constants/error-code'
 import type { AuthAdapter, ErrorKind, FieldError, HttpOptions, RequestOptions } from '@/types/http'
 
 /** 只保留可交给页面的错误，不保留 token、请求对象或原始响应。 / Safe UI error without request secrets. */
@@ -30,6 +35,17 @@ export class ApiError extends Error {
     this.status = status
     this.details = details
   }
+}
+
+/** 按契约常量判断业务错误，并收窄错误码。 / Match a contract descriptor and narrow the error code.
+ * 参数/Params: 未知错误及 ERROR_CODE 中的一项 / Unknown error and an ERROR_CODE entry.
+ * 返回/Returns: 是否匹配的 ApiError，无副作用 / ApiError type predicate, no side effects.
+ */
+export function isErrorCode<Definition extends ErrorDefinition>(
+  error: unknown,
+  expected: Definition,
+): error is ApiError & { readonly code: Definition['code'] } {
+  return error instanceof ApiError && error.kind === 'business' && error.code === expected.code
 }
 
 /** 判断未知值是否普通数据对象。 / Narrow unknown input to an object.
@@ -149,7 +165,8 @@ export class HttpClient {
         ) {
           throw new ApiError('protocol', response.status)
         }
-        if (body.code === 'NEED_LOGIN' && !options.anonymous) await this.notifyExpired(auth, token)
+        if (body.code === ERROR_CODE.NEED_LOGIN.code && !options.anonymous)
+          await this.notifyExpired(auth, token)
         throw new ApiError(
           'business',
           response.status,

@@ -1,5 +1,6 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
 import type { components } from '@/api/generated/admin'
+import { ERROR_CODE } from '@/constants/error-code'
 
 /**
  * 中文：未注册的管理接口明确失败；无输入，返回契约错误，不记录或回显请求资料。
@@ -7,7 +8,11 @@ import type { components } from '@/api/generated/admin'
  */
 function missingMock() {
   return HttpResponse.json<components['schemas']['ErrorResponse']>(
-    { ok: false, code: 'INTERNAL_ERROR', message: '模拟接口尚未注册，请检查模块配置' },
+    {
+      ok: false,
+      code: ERROR_CODE.INTERNAL_ERROR.code,
+      message: '模拟接口尚未注册，请检查模块配置',
+    },
     { status: 500 },
   )
 }
