@@ -24,3 +24,14 @@ frontend/web/.prettierignore
 frontend/web/pnpm-workspace.yaml
 frontend/web/.node-version
 frontend/web/index.html
+
+# W-01b 请求与模拟（#21）
+# 后续契约重新生成及错误码文件修改须按解锁流程审查。
+# constants/ 保持开放，业务模块可新增自己的状态文案和标签颜色文件。
+# mocks/handlers/index.ts 保持开放，模块在兜底 handler 前追加自己的注册。
+# main.ts 保持开放，供 W-01c 接入路由；不锁配置文件和 README。
+frontend/web/src/api/http.ts
+frontend/web/src/api/generated/
+frontend/web/src/mocks/browser.ts
+frontend/web/src/constants/error-code.ts
+frontend/web/src/types/
