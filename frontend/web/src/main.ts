@@ -15,11 +15,16 @@ app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 
-// TODO(W-01b)：在挂载之前启动 MSW 模拟接口，保证第一个请求发出前模拟服务已就绪。
-// 必须用动态 import，生产构建中 VITE_USE_MOCK 为 'false'，MSW 不会被打包进去。
-//   if (import.meta.env.VITE_USE_MOCK === 'true') {
-//     const { worker } = await import('@/mocks/browser')
-//     await worker.start({ onUnhandledRequest: 'bypass' })
-//   }
+/** 等待开发模拟服务就绪后挂载。 / Wait for development mocking before mounting.
+ * 参数/Params: 无。返回/Returns: Promise<void>；模拟启动失败时拒绝并阻止挂载 / Reject on mock startup failure.
+ * 副作用/Effects: 开发时注册worker，随后挂载应用 / Register a dev worker, then mount the app.
+ */
+async function bootstrap(): Promise<void> {
+  if (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true') {
+    const { startMocking } = await import('@/mocks/browser')
+    await startMocking()
+  }
+  app.mount('#app')
+}
 
-app.mount('#app')
+void bootstrap()
