@@ -1,0 +1,130 @@
+# 拾澳 CI：所有检查都在这个工作流里，规则集只把 ci-required 设为必需检查。
+# 每个检查的作用和失败时的处理方法见同目录的 README.md。
+
+name: CI
+
+on:
+  # 禁止改用 pull_request_target：它以目标分支的权限运行 PR 中的代码
+  pull_request:
+    branches: [develop, main]
+    # 标签变化（如加上 unlock）也完整运行所有检查
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [develop, main]
+
+# 顶层不给任何权限，每个 job 只声明自己需要的
+permissions: {}
+
+concurrency:
+  # 同一个 PR 共用一组，新的运行会取消旧的；push 按提交区分，互不取消
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # 判断这次改动涉及哪些部分，后面的 job 按结果决定是否运行
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      web: ${{ steps.diff.outputs.web }}
+      api: ${{ steps.diff.outputs.api }}
+      workflows: ${{ steps.diff.outputs.workflows }}
+      files: ${{ steps.diff.outputs.files }}
+    steps:
+      # PR 事件检出的是 GitHub 生成的合并提交，深度 2 即可拿到它的两个父提交
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            # push 到 develop、main 时，全部视为涉及
+            {
+              echo "web=true"
+              echo "api=true"
+              echo "workflows=true"
+              echo "files="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify --quiet HEAD^2 >/dev/null; then
+            echo "::error::检出的不是合并提交，无法计算 PR 的改动范围"
+            exit 1
+          fi
+
+          # 合并提交的第一个父提交是基础分支的最新提交，两者之差就是 PR 的实际改动。
+          # --no-renames 让重命名的旧路径也出现在列表中，供锁定目录检查使用。
+          files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
+          echo "本次改动的文件："
+          echo "$files"
+
+          has() { grep -q "^$1" <<<"$files" && echo true || echo false; }
+          {
+            echo "web=$(has 'frontend/web/')"
+            echo "api=$(has 'docs/api/')"
+            echo "workflows=$(has '.github/workflows/')"
+            echo "files<<CHANGED_FILES_EOF"
+            echo "$files"
+            echo "CHANGED_FILES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # 检查工作流文件的语法和常见错误，run 中的脚本由 runner 预装的 shellcheck 检查
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint 没有 GitHub 官方的 Action，直接下载固定版本，校验哈希后使用
+      - name: 安装 actionlint
+        run: |
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+
+      - name: 检查工作流
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+  # 规则集中唯一的必需检查：汇总上面所有 job 的结果
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [changes, actionlint]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 汇总结果
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          # skipped 表示这次改动不涉及该检查，视为通过
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<<"$NEEDS" >/dev/null; then
+            echo "::error::有检查失败或被取消，点开上面失败的 job 查看原因"
+            exit 1
+          fi
