@@ -181,11 +181,68 @@ jobs:
           fi
           echo "生成的类型与契约一致"
 
+  # 接口契约：OpenAPI 格式检查，以及生成类型时会出问题的写法
+  contract:
+    name: contract
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      REDOCLY_CLI_VERSION: 2.71.2
+      REDOCLY_TELEMETRY: 'off'
+      REDOCLY_SUPPRESS_UPDATE_NOTICE: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/web/.node-version
+          package-manager-cache: false
+
+      - name: 查找契约文件
+        run: |
+          mapfile -t specs < <(find docs/api -type f \( -name '*.openapi.yaml' -o -name '*.openapi.yml' \) | sort)
+          if [[ ${#specs[@]} -eq 0 ]]; then
+            echo "::error::docs/api/ 下没有找到 *.openapi.yaml 文件"
+            exit 1
+          fi
+          printf '%s\n' "${specs[@]}"
+          printf '%s\n' "${specs[@]}" > "$RUNNER_TEMP/specs.txt"
+
+      # 有 error 时失败，warning 只显示不失败。
+      # --before 让间接依赖也只取 7 天前已发布的版本，与 pnpm 的 minimumReleaseAge 规则一致
+      - name: redocly lint
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/specs.txt"
+          npm exec --yes --before="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+            --package="@redocly/cli@${REDOCLY_CLI_VERSION}" -- redocly lint "${specs[@]}"
+
+      # openapi-typescript 会把 paths 下 x- 开头的字段当成一个接口路径，生成错误的类型
+      - name: 检查 paths 下的 x- 字段
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/specs.txt"
+          failed=0
+          for spec in "${specs[@]}"; do
+            bad="$(yq '.paths // {} | keys | .[] | select(test("^x-"))' "$spec")"
+            if [[ -n "$bad" ]]; then
+              while read -r key; do
+                echo "::error file=${spec}::paths 下不能有 x- 开头的字段：${key}。生成类型时它会被当成一个接口路径，请移到 paths 之外（如根级别或具体接口内）"
+              done <<<"$bad"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
   # 规则集中唯一的必需检查：汇总上面所有 job 的结果
   ci-required:
     name: ci-required
     if: always()
-    needs: [changes, actionlint, frontend-web]
+    needs: [changes, actionlint, frontend-web, contract]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
