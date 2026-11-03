@@ -91,7 +91,7 @@ pnpm gen:api
 - 模块 handler 在 `src/mocks/handlers/index.ts` 的最后兜底之前注册，数据用生成类型。尚未注册的管理接口返回契约错误，不透传到真实服务；测试 handler 仅在测试文件中，不进入应用接口契约。
 - worker 由 `pnpm exec msw init public --save` 生成，禁止手改。生产 `dist` 会保留这个静态文件，但入口不注册它，应用 JS 不包含 MSW 运行时代码。
 
-当前类型以 `develop` 已合入的契约为准，已包括 W-00b 的13个操作。B/C 业务契约合并后，再按解锁流程运行 `pnpm gen:api`；不从尚未合并的 PR 复制接口。仅锁定 `src/constants/error-code.ts`，业务模块可以在 `src/constants/` 新建状态文案文件。
+当前类型以 `develop` 已合入的契约为准，已包括 W-00b 的 A 区块和 PR #43 的 C 区块（登录、闲置类目、闲置）。B 区块后续合入后，再按解锁流程运行 `pnpm gen:api`；不从尚未合并的 PR 复制接口。仅锁定 `src/constants/error-code.ts`，业务模块可以在 `src/constants/` 新建状态文案文件；`src/mocks/handlers/index.ts` 保持开放，模块在兜底 handler 前追加注册。
 
 ## 依赖管理
 

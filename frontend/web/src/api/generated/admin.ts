@@ -264,6 +264,145 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员登录
+         * @description 账号加密码登录，与顾客的微信登录分开。登录成功返回 token 和过期时间。
+         *     登录失败统一返回 BAD_PASSWORD，不区分是账号错还是密码错。
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/flea-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 闲置类目列表
+         * @description 只给闲置发布页用，和商城类目分开。数量很少，不分页，按 sort 排序。
+         */
+        get: operations["listFleaCategories"];
+        put?: never;
+        /**
+         * 新增闲置类目
+         * @description 中文名和英文名都不能与已有的闲置类目重复。
+         */
+        post: operations["createFleaCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/flea-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 删除闲置类目
+         * @description 还有在售帖子使用这个类目时不能删除（inUseCount 大于 0）。
+         */
+        delete: operations["deleteFleaCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 闲置帖子列表（封面墙）
+         * @description 包含在售、已出、卖家自己下架、强制下架的全部帖子，按发布时间从新到旧排列。
+         *     本接口不改变「已浏览」标记，只有打开详情才记为已浏览。
+         */
+        get: operations["listListings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/listings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 查看帖子
+         * @description 返回帖子详情，并把这条帖子的当前内容版本记为已浏览（全店一份，不按管理员分别记录）。
+         *     返回的 seen 是本次打开之后的状态，因此总是 true；
+         *     contentChangedSinceSeen 是本次打开之前的状态，前端据此说明「卖家修改过内容，这次重新记为已浏览」。
+         *     不返回卖家的手机号和微信号。
+         */
+        get: operations["getListing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/listings/{id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 强制下架帖子
+         * @description 只有在售（on_sale）的帖子可以强制下架，状态变为 admin_removed。
+         *     原因必填，卖家能在自己的帖子里看到。下架不影响「已浏览」标记。
+         */
+        post: operations["removeListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -937,6 +1076,146 @@ export interface components {
             /** @enum {string} */
             expectedListingStatus: "sold" | "self_removed" | "admin_removed";
         };
+        /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
+        Admin: {
+            id: components["schemas"]["Id"];
+            /** @description 登录账号 */
+            account: string;
+        };
+        LoginRequest: {
+            /** @description 登录账号 */
+            account: string;
+            /** @description 密码。长度上限为建议值 */
+            password: string;
+        };
+        LoginResult: {
+            /** @description 管理员 token，放在请求头中：`Authorization: Bearer <token>` */
+            token: string;
+            expiresAt: components["schemas"]["DateTime"];
+            admin: components["schemas"]["Admin"];
+        };
+        /** @description 闲置类目。与商城类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改 */
+        FleaCategory: {
+            id: components["schemas"]["Id"];
+            /** @description 中文名，不能重复 */
+            nameZh: string;
+            /** @description 英文名，不能重复 */
+            nameEn: string;
+            /** @description 排序值，数字小的排在前面 */
+            sort: number;
+            /** @description 使用这个类目的在售帖子数。大于 0 时不能删除，前端据此禁用删除按钮 */
+            inUseCount: number;
+        };
+        /** @description 新增闲置类目时提交的内容 */
+        FleaCategoryInput: {
+            nameZh: string;
+            nameEn: string;
+            sort: number;
+        };
+        /**
+         * @description 闲置帖子状态。举报模块（A 区块）也引用本定义
+         *     - on_sale：在售
+         *     - sold：已出（卖家标记）
+         *     - self_removed：已下架（卖家自己下架）
+         *     - admin_removed：已下架（店员强制下架，必须有原因）
+         * @enum {string}
+         */
+        ListingStatus: "on_sale" | "sold" | "self_removed" | "admin_removed";
+        /**
+         * @description 闲置列表的状态筛选项
+         *     - on_sale：在售
+         *     - sold：已出
+         *     - removed：已下架，同时包含 self_removed 和 admin_removed
+         * @enum {string}
+         */
+        ListingStatusFilter: "on_sale" | "sold" | "removed";
+        /**
+         * @description 成色
+         *     - brand_new：全新
+         *     - like_new：几乎全新
+         *     - lightly_used：轻微使用
+         *     - well_used：明显使用
+         * @enum {string}
+         */
+        ListingCondition: "brand_new" | "like_new" | "lightly_used" | "well_used";
+        /**
+         * @description 联系方式申请状态。由卖家在小程序中处理，后台只读
+         *     - pending：待处理
+         *     - approved：已同意
+         *     - rejected：已拒绝（只拒绝这一次，对方可以再申请）
+         *     - blocked：已拒绝此人（对方不能再申请这条帖子）
+         * @enum {string}
+         */
+        ContactRequestStatus: "pending" | "approved" | "rejected" | "blocked";
+        /** @description 闲置列表（封面墙）中的一条帖子。帖子由用户在小程序中发布，后台不能修改内容 */
+        ListingListItem: {
+            id: components["schemas"]["Id"];
+            seller: components["schemas"]["UserBrief"];
+            cityId: components["schemas"]["Id"];
+            cityNameZh: string;
+            categoryId: components["schemas"]["Id"];
+            categoryNameZh: string;
+            title: string;
+            priceCents: components["schemas"]["Cents"];
+            /** @description 可小议 */
+            negotiable: boolean;
+            condition: components["schemas"]["ListingCondition"];
+            status: components["schemas"]["ListingStatus"];
+            /** @description 强制下架的原因。不是 admin_removed 时为 null */
+            removeReason: string | null;
+            cover: components["schemas"]["Image"];
+            /** @description 图片总数 */
+            imageCount: number;
+            /**
+             * @description 是否已浏览：当且仅当已浏览的版本号等于当前内容版本号。全店一份，不按管理员分别记录。
+             *     卖家改了标题、描述、图片、标价、是否可小议、成色、类目或城市，内容版本加 1，已浏览去掉。
+             *     评论、回复、联系方式申请和处理、标已出、自己下架、强制下架、举报，都不加版本，标记留着。
+             */
+            seen: boolean;
+            createdAt: components["schemas"]["DateTime"];
+        };
+        /** @description 帖子详情。在列表字段的基础上，增加正文、全部图片、评论和联系方式申请 */
+        ListingDetail: components["schemas"]["ListingListItem"] & {
+            description: string;
+            /** @description 全部图片，第一张是封面 */
+            images: components["schemas"]["Image"][];
+            /** @description 曾被浏览过、但卖家之后修改了内容（本次打开之前的状态） */
+            contentChangedSinceSeen: boolean;
+            /** @description 按时间正序 */
+            comments: components["schemas"]["Comment"][];
+            /** @description 按时间正序 */
+            contactRequests: components["schemas"]["ContactRequest"][];
+        };
+        /** @description 帖子下的评论。回复只有一层 */
+        Comment: {
+            id: components["schemas"]["Id"];
+            user: components["schemas"]["UserBrief"];
+            /** @description 回复的评论。直接评论帖子时为 null */
+            parentId: components["schemas"]["Id"] | null;
+            /** @description deleted 为 true 时为空字符串 */
+            content: string;
+            /** @description 已被作者删除。页面显示「该评论已删除」 */
+            deleted: boolean;
+            createdAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 联系方式申请（后台视角）。只展示卖家已经做出的处理结果，后台不能替卖家同意或拒绝。
+         *     不包含卖家的手机号和微信号。
+         */
+        ContactRequest: {
+            id: components["schemas"]["Id"];
+            buyer: components["schemas"]["UserBrief"];
+            /** @description 附言 */
+            note: string | null;
+            status: components["schemas"]["ContactRequestStatus"];
+            /** @description 同一人对这条帖子的第几次申请 */
+            attemptNo: number;
+            createdAt: components["schemas"]["DateTime"];
+        };
+        RemoveListingRequest: {
+            /** @description 强制下架的原因，卖家能看到。去掉首尾空格后不能为空（至少有一个非空白字符） */
+            reason: string;
+        };
     };
     responses: {
         /** @description 成功，没有数据返回 */
@@ -1562,6 +1841,218 @@ export interface operations {
             /** @description INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。 */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。 */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["LoginResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /** @description BAD_PASSWORD（账号或密码错误） */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": false,
+                     *       "code": "BAD_PASSWORD",
+                     *       "message": "账号或密码错误"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listFleaCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["FleaCategory"][];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["NeedLogin"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createFleaCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FleaCategoryInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的类目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["FleaCategory"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["NeedLogin"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有闲置类目重复） */
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteFleaCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            401: components["responses"]["NeedLogin"];
+            404: components["responses"]["NotFound"];
+            /** @description CATEGORY_IN_USE（还有在售帖子使用这个类目） */
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listListings: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                /** @description 每页条数 */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description 按状态筛选，不传则返回全部 */
+                status?: components["schemas"]["ListingStatusFilter"];
+                /** @description 按城市筛选，传城市 ID。不传则返回全部城市 */
+                city?: components["schemas"]["Id"];
+                /** @description 传 0 只返回未浏览的帖子，不传则返回全部 */
+                seen?: 0;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["PageMeta"] & {
+                            items: components["schemas"]["ListingListItem"][];
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["NeedLogin"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["ListingDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["NeedLogin"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    removeListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveListingRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["OkNoData"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["NeedLogin"];
+            404: components["responses"]["NotFound"];
+            /** @description LISTING_NOT_ON_SALE（帖子不是在售状态，不能强制下架） */
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };
