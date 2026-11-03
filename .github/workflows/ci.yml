@@ -109,11 +109,83 @@ jobs:
       - name: 检查工作流
         run: '"$RUNNER_TEMP/actionlint" -color'
 
+  # 管理后台前端：契约改动也会影响生成的类型，所以 docs/api/ 有改动时同样运行
+  frontend-web:
+    name: frontend-web
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend/web
+    env:
+      # corepack 下载 pnpm 时不弹出确认提示
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node 版本以 .node-version 为准，不在这里写死
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/web/.node-version
+          package-manager-cache: false
+
+      # pnpm 版本以 package.json 的 packageManager 为准，corepack 会校验其中的 sha512
+      - name: 启用 pnpm
+        run: |
+          corepack enable
+          pnpm --version
+          echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: 缓存 pnpm 依赖
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/web/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 代码检查
+        run: pnpm lint
+
+      # 本地由 lefthook 自动格式化，这里兜底没有装钩子或跳过钩子的提交
+      - name: 格式检查
+        run: pnpm format:check
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 单元测试
+        run: pnpm test
+
+      - name: 构建
+        run: pnpm build
+
+      # 重新生成接口类型，与提交的版本比较（包括新增的未跟踪文件）
+      - name: 生成类型一致性检查
+        run: |
+          pnpm gen:api
+          changed="$(git status --porcelain -- src/api/generated/)"
+          if [[ -n "$changed" ]]; then
+            echo "$changed"
+            git --no-pager diff --stat -- src/api/generated/
+            echo "::error::契约改了但类型没有重新生成，请在 frontend/web 下执行 pnpm gen:api 并提交生成结果"
+            exit 1
+          fi
+          echo "生成的类型与契约一致"
+
   # 规则集中唯一的必需检查：汇总上面所有 job 的结果
   ci-required:
     name: ci-required
     if: always()
-    needs: [changes, actionlint]
+    needs: [changes, actionlint, frontend-web]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
