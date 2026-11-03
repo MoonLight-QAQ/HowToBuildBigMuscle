@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { useAuthStore } from '@/stores/auth'
+import { setupAuthGuard } from './guard'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -36,8 +38,8 @@ const router = createRouter({
   routes,
 })
 
-// TODO(W-01c)：登录状态的 store 完成后，在这里注册登录守卫：
-//   setupAuthGuard(router, () => useAuthStore().isLoggedIn)
+// 守卫在每次导航时才读取 store，此时 main.ts 已安装 Pinia
+setupAuthGuard(router, () => useAuthStore().isLoggedIn())
 
 router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} - ${APP_TITLE}` : APP_TITLE

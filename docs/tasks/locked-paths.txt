@@ -35,3 +35,9 @@ frontend/web/src/api/generated/
 frontend/web/src/mocks/browser.ts
 frontend/web/src/constants/error-code.ts
 frontend/web/src/types/
+
+# W-01c 路由、布局与登录状态（#22）
+# router/index.ts 保持开放，各业务模块在其中添加属于自己的路由。
+frontend/web/src/router/guard.ts
+frontend/web/src/layouts/
+frontend/web/src/stores/

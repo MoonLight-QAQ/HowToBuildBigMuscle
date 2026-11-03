@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
+import { LOGIN_PATH } from '@/router/guard'
+import { useAuthStore } from '@/stores/auth'
 import { findActiveMenuPath, MENU_GROUPS } from './menu'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 const activeMenuPath = computed(() => findActiveMenuPath(route.path))
+
+// 契约中没有退出登录接口，只清除本地登录信息
+async function logout(): Promise<void> {
+  authStore.clear()
+  await router.replace(LOGIN_PATH)
+}
 </script>
 
 <template>
@@ -21,7 +31,10 @@ const activeMenuPath = computed(() => findActiveMenuPath(route.path))
     </el-aside>
 
     <el-container>
-      <!-- TODO(W-01c)：登录状态的 store 完成后，在这里加顶栏：当前管理员账号、退出登录 -->
+      <el-header class="admin-layout__header">
+        <span class="admin-layout__account">{{ authStore.admin?.account }}</span>
+        <el-button link type="primary" @click="logout">退出登录</el-button>
+      </el-header>
       <el-main class="admin-layout__main">
         <RouterView />
       </el-main>
@@ -44,6 +57,19 @@ const activeMenuPath = computed(() => findActiveMenuPath(route.path))
   font-size: $font-size-large;
   font-weight: 600;
   color: $text-primary;
+}
+
+.admin-layout__header {
+  display: flex;
+  gap: $space-md;
+  align-items: center;
+  justify-content: flex-end;
+  background-color: $bg-base;
+  border-bottom: 1px solid $border-color-light;
+}
+
+.admin-layout__account {
+  color: $text-regular;
 }
 
 .admin-layout__main {
