@@ -116,3 +116,4 @@ pnpm gen:api
 **`pnpm -v` 的版本不是 12.15.0**
 
 pnpm 不是通过 corepack 使用的。卸载用其他方式安装的 pnpm 后，执行 `corepack enable`。
+
