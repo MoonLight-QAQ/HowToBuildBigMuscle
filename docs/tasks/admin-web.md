@@ -33,14 +33,12 @@ flowchart LR
     classDef a fill:#fde2e2,stroke:#c0392b,color:#000
     classDef b fill:#dbeafe,stroke:#1d4ed8,color:#000
     classDef c fill:#dcfce7,stroke:#15803d,color:#000
-    classDef todo fill:#eeeeee,stroke:#888,color:#000,stroke-dasharray:4 3
     class W00b,W01b,W01d,W09,W10,W11,W12 a
-    class W00a,W00c,W01a,W01f,W02,W04,W05,W06 b
+    class W00a,W00c,W01a,W01e,W01f,W02,W04,W05,W06 b
     class W00d,W01c,W03,W07,W08 c
-    class W01e todo
 ```
 
-🟥 A @RealninX　🟦 B @MoonLight-QAQ　🟩 C @celine-hy　⬜ 待分配
+🟥 A @RealninX　🟦 B @MoonLight-QAQ　🟩 C @celine-hy
 
 **W-02 城市是示例模块**，其他人照着它的写法开发。W-02 合并后，其余业务模块可以并行。
 
@@ -65,7 +63,7 @@ flowchart LR
 | W-01b | 请求与模拟：请求封装、从契约生成类型、模拟接口的基础设施、错误码常量 | `src/api/http.ts`、`src/api/generated/`、`src/mocks/browser.ts`、`src/mocks/handlers/index.ts`、`src/constants/`、`src/types/` | @RealninX | W-01a |
 | W-01c | 路由、布局与登录状态 | `src/router/`、`src/layouts/`、`src/stores/` | @celine-hy | W-01a |
 | W-01d | 通用组件与工具，以及它们的单元测试 | `src/components/`、`src/composables/`、`src/utils/` | @RealninX | W-01a |
-| W-01e | CI 流水线：前端检查、PR 来源分支检查、锁定目录检查、依赖更新 | 仓库根目录下的 `.github/workflows/`、`.github/dependabot.yml`、`.github/repo-settings/` | **待分配** | W-01a |
+| W-01e | CI 流水线：前端检查、PR 来源分支检查、锁定目录检查、依赖更新 | 仓库根目录下的 `.github/workflows/`、`.github/dependabot.yml`、`.github/repo-settings/` | @MoonLight-QAQ | W-01a |
 | W-01f | 环境配置文档：`CONTRIBUTING.md` 和根目录 `README.md` 中 Node、pnpm 的安装方法与工程固定的版本对齐 | 仓库根目录下的 `CONTRIBUTING.md`、`README.md` 中与 Node、pnpm 有关的部分 | @MoonLight-QAQ | W-01a |
 
 ## 三、业务模块
@@ -91,9 +89,8 @@ flowchart LR
 | 成员 | 契约 | 骨架 | 业务模块 |
 | --- | --- | --- | --- |
 | A @RealninX | W-00b | W-01b、W-01d | W-09、W-10、W-11、W-12 |
-| B @MoonLight-QAQ | W-00a、W-00c | W-01a、W-01f | W-02、W-04、W-05、W-06 |
+| B @MoonLight-QAQ | W-00a、W-00c | W-01a、W-01e、W-01f | W-02、W-04、W-05、W-06 |
 | C @celine-hy | W-00d | W-01c | W-03、W-07、W-08 |
-| 待分配 | — | W-01e | — |
 
 ## 修改本文件
 
