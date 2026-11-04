@@ -1,0 +1,358 @@
+# 拾澳 CI：所有检查都在这个工作流里，规则集只把 ci-required 设为必需检查。
+# 每个检查的作用和失败时的处理方法见同目录的 README.md。
+
+name: CI
+
+on:
+  # 禁止改用 pull_request_target：它以目标分支的权限运行 PR 中的代码
+  pull_request:
+    branches: [develop, main]
+    # 标签变化（如加上 unlock）也完整运行所有检查
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [develop, main]
+
+# 顶层不给任何权限，每个 job 只声明自己需要的
+permissions: {}
+
+concurrency:
+  # 同一个 PR 共用一组，新的运行会取消旧的；push 按提交区分，互不取消
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # 判断这次改动涉及哪些部分，后面的 job 按结果决定是否运行
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      web: ${{ steps.diff.outputs.web }}
+      api: ${{ steps.diff.outputs.api }}
+      workflows: ${{ steps.diff.outputs.workflows }}
+      files: ${{ steps.diff.outputs.files }}
+    steps:
+      # PR 事件检出的是 GitHub 生成的合并提交，深度 2 即可拿到它的两个父提交
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            # push 到 develop、main 时，全部视为涉及
+            {
+              echo "web=true"
+              echo "api=true"
+              echo "workflows=true"
+              echo "files="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify --quiet HEAD^2 >/dev/null; then
+            echo "::error::检出的不是合并提交，无法计算 PR 的改动范围"
+            exit 1
+          fi
+
+          # 合并提交的第一个父提交是基础分支的最新提交，两者之差就是 PR 的实际改动。
+          # --no-renames 让重命名的旧路径也出现在列表中，供锁定目录检查使用。
+          files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
+          echo "本次改动的文件："
+          echo "$files"
+
+          has() { grep -q "^$1" <<<"$files" && echo true || echo false; }
+          {
+            echo "web=$(has 'frontend/web/')"
+            echo "api=$(has 'docs/api/')"
+            echo "workflows=$(has '.github/workflows/')"
+            echo "files<<CHANGED_FILES_EOF"
+            echo "$files"
+            echo "CHANGED_FILES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # 检查工作流文件的语法和常见错误，run 中的脚本由 runner 预装的 shellcheck 检查
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint 没有 GitHub 官方的 Action，直接下载固定版本，校验哈希后使用
+      - name: 安装 actionlint
+        run: |
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+
+      - name: 检查工作流
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
+  # 管理后台前端：契约改动也会影响生成的类型，所以 docs/api/ 有改动时同样运行
+  frontend-web:
+    name: frontend-web
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend/web
+    env:
+      # corepack 下载 pnpm 时不弹出确认提示
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node 版本以 .node-version 为准，不在这里写死
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/web/.node-version
+          package-manager-cache: false
+
+      # pnpm 版本以 package.json 的 packageManager 为准，corepack 会校验其中的 sha512
+      - name: 启用 pnpm
+        run: |
+          corepack enable
+          pnpm --version
+          echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: 缓存 pnpm 依赖
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/web/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 代码检查
+        run: pnpm lint
+
+      # 本地由 lefthook 自动格式化，这里兜底没有装钩子或跳过钩子的提交
+      - name: 格式检查
+        run: pnpm format:check
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 单元测试
+        run: pnpm test
+
+      - name: 构建
+        run: pnpm build
+
+      # 重新生成接口类型，与提交的版本比较（包括新增的未跟踪文件）
+      - name: 生成类型一致性检查
+        run: |
+          pnpm gen:api
+          changed="$(git status --porcelain -- src/api/generated/)"
+          if [[ -n "$changed" ]]; then
+            echo "$changed"
+            git --no-pager diff --stat -- src/api/generated/
+            echo "::error::契约改了但类型没有重新生成，请在 frontend/web 下执行 pnpm gen:api 并提交生成结果"
+            exit 1
+          fi
+          echo "生成的类型与契约一致"
+
+  # 接口契约：OpenAPI 格式检查，以及生成类型时会出问题的写法
+  contract:
+    name: contract
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      REDOCLY_CLI_VERSION: 2.71.2
+      REDOCLY_TELEMETRY: 'off'
+      REDOCLY_SUPPRESS_UPDATE_NOTICE: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/web/.node-version
+          package-manager-cache: false
+
+      - name: 查找契约文件
+        run: |
+          mapfile -t specs < <(find docs/api -type f \( -name '*.openapi.yaml' -o -name '*.openapi.yml' \) | sort)
+          if [[ ${#specs[@]} -eq 0 ]]; then
+            echo "::error::docs/api/ 下没有找到 *.openapi.yaml 文件"
+            exit 1
+          fi
+          printf '%s\n' "${specs[@]}"
+          printf '%s\n' "${specs[@]}" > "$RUNNER_TEMP/specs.txt"
+
+      # 有 error 时失败，warning 只显示不失败。
+      # --before 让间接依赖也只取 7 天前已发布的版本，与 pnpm 的 minimumReleaseAge 规则一致
+      - name: redocly lint
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/specs.txt"
+          npm exec --yes --before="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+            --package="@redocly/cli@${REDOCLY_CLI_VERSION}" -- redocly lint "${specs[@]}"
+
+      # openapi-typescript 会把 paths 下 x- 开头的字段当成一个接口路径，生成错误的类型
+      - name: 检查 paths 下的 x- 字段
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/specs.txt"
+          failed=0
+          for spec in "${specs[@]}"; do
+            bad="$(yq '.paths // {} | keys | .[] | select(test("^x-"))' "$spec")"
+            if [[ -n "$bad" ]]; then
+              while read -r key; do
+                echo "::error file=${spec}::paths 下不能有 x- 开头的字段：${key}。生成类型时它会被当成一个接口路径，请移到 paths 之外（如根级别或具体接口内）"
+              done <<<"$bad"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  # main 只接收 develop 和 hotfix/*（见 docs/adr/0002-branch-strategy.md）
+  pr-target:
+    name: pr-target
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 检查来源分支
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "来源：${HEAD_REPO}:${HEAD_REF} → main"
+          # 来源必须是本仓库的分支，复刻仓库中同名的 develop 不算
+          if [[ "$HEAD_REPO" == "$REPO" && ( "$HEAD_REF" == "develop" || "$HEAD_REF" == hotfix/* ) ]]; then
+            echo "来源分支符合要求"
+            exit 0
+          fi
+          echo "::error::main 只接收本仓库的 develop 和 hotfix/* 分支。功能分支请把 PR 的目标分支改为 develop"
+          exit 1
+
+  # PR 改动了锁定目录、却没有 unlock 标签时失败（见 docs/tasks/README.md 的「锁定」一节）
+  locked-paths:
+    name: locked-paths
+    needs: changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: 检查锁定目录
+        env:
+          FILES: ${{ needs.changes.outputs.files }}
+          UNLOCKED: ${{ contains(github.event.pull_request.labels.*.name, 'unlock') }}
+        run: |
+          # 锁定清单从基础分支读取（合并提交的第一个父提交），
+          # 防止 PR 先删掉某条锁定、再修改对应的目录
+          locks="$(git show HEAD^1:docs/tasks/locked-paths.txt 2>/dev/null || true)"
+
+          # 与 .claude/hooks/check-locked-paths.sh 的规则一致：去掉 # 后的注释和首尾空白，按前缀匹配
+          hits=()
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            while IFS= read -r line; do
+              lock="$(sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<<"$line")"
+              [[ -n "$lock" ]] || continue
+              if [[ "$file" == "$lock"* ]]; then
+                hits+=("${file}（锁定路径：${lock}）")
+                break
+              fi
+            done <<<"$locks"
+          done <<<"$FILES"
+
+          if [[ ${#hits[@]} -eq 0 ]]; then
+            echo "没有改动锁定目录"
+            exit 0
+          fi
+
+          echo "以下文件位于锁定目录中："
+          printf '  %s\n' "${hits[@]}"
+
+          if [[ "$UNLOCKED" == "true" ]]; then
+            echo "::notice::PR 有 unlock 标签，放行。请由对应模块的负责人审批"
+            exit 0
+          fi
+
+          echo "::error::PR 改动了锁定目录，但没有 unlock 标签"
+          cat <<'EOF'
+          处理方法（详见 docs/tasks/README.md 的「锁定」一节）：
+            1. 如果是顺手改的，撤销对这些文件的修改。
+            2. 确实需要修改时，先和该模块的负责人沟通改什么、为什么改。
+            3. 负责人同意后，在 PR 上添加 unlock 标签，CI 会自动重新运行。
+            4. 由该模块的负责人审批 PR。
+          EOF
+          exit 1
+
+  # PR 新增或升级的依赖有高危及以上漏洞时失败
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # 默认只检查 runtime；构建和测试工具（devDependencies）同样会在 CI 和本机上运行
+          fail-on-scopes: runtime, development, unknown
+
+  # 规则集中唯一的必需检查：汇总上面所有 job 的结果
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [changes, actionlint, frontend-web, contract, pr-target, locked-paths, dependency-review]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 汇总结果
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          # skipped 表示这次改动不涉及该检查，视为通过
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          if jq -e 'any(.[]; .result == "failure" or .result == "cancelled")' <<<"$NEEDS" >/dev/null; then
+            echo "::error::有检查失败或被取消，点开上面失败的 job 查看原因"
+            exit 1
+          fi
