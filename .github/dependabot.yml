@@ -1,0 +1,46 @@
+# Dependabot 版本更新：每周检查一次，PR 的目标分支是 develop。
+# 安全更新由仓库设置开启（见 .github/repo-settings/apply.sh），不受这里的冷却期影响，
+# 审查安全更新的 PR 时，人工确认修复版本已发布满 7 天。
+
+version: 2
+
+updates:
+  # 管理后台前端的 npm 依赖（pnpm 锁文件）
+  - package-ecosystem: npm
+    directory: /frontend/web
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Australia/Sydney
+    # 新版本发布满 7 天后才提 PR，与 pnpm-workspace.yaml 的 minimumReleaseAge 一致
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      production:
+        dependency-type: production
+      development:
+        dependency-type: development
+
+  # 工作流中引用的 Action
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Australia/Sydney
+    # GitHub Actions 只支持 default-days，不支持按 semver 分别设置
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      actions:
+        patterns: ['*']

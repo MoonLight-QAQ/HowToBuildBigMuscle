@@ -322,11 +322,26 @@ jobs:
           EOF
           exit 1
 
+  # PR 新增或升级的依赖有高危及以上漏洞时失败
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # 默认只检查 runtime；构建和测试工具（devDependencies）同样会在 CI 和本机上运行
+          fail-on-scopes: runtime, development, unknown
+
   # 规则集中唯一的必需检查：汇总上面所有 job 的结果
   ci-required:
     name: ci-required
     if: always()
-    needs: [changes, actionlint, frontend-web, contract, pr-target, locked-paths]
+    needs: [changes, actionlint, frontend-web, contract, pr-target, locked-paths, dependency-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
