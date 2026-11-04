@@ -1,0 +1,2 @@
+# 从契约生成的接口类型：在 GitHub 的 PR 差异中默认折叠，不计入语言统计
+frontend/web/src/api/generated/** linguist-generated=true
