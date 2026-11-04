@@ -37,3 +37,9 @@ frontend/web/src/api/http.ts
 frontend/web/src/mocks/browser.ts
 frontend/web/src/constants/error-code.ts
 frontend/web/src/types/
+
+# W-01e CI 流水线（#24）
+# .github/workflows/ 不锁定：Dependabot 每周升级 Action 版本时要修改 ci.yml，
+# 该目录由 CODEOWNERS 的代码负责人审查保护。
+.github/dependabot.yml
+.github/repo-settings/
