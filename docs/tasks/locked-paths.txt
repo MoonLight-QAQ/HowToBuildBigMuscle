@@ -38,6 +38,12 @@ frontend/web/src/mocks/browser.ts
 frontend/web/src/constants/error-code.ts
 frontend/web/src/types/
 
+# W-01c 路由、布局与登录状态（#22）
+# router/index.ts 保持开放，各业务模块在其中添加属于自己的路由。
+frontend/web/src/router/guard.ts
+frontend/web/src/layouts/
+frontend/web/src/stores/
+
 # W-01e CI 流水线（#24）
 # .github/workflows/ 不锁定：Dependabot 每周升级 Action 版本时要修改 ci.yml，
 # 该目录由 CODEOWNERS 的代码负责人审查保护。
