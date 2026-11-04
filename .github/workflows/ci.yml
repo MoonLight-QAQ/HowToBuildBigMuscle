@@ -238,11 +238,95 @@ jobs:
           done
           exit "$failed"
 
+  # main 只接收 develop 和 hotfix/*（见 docs/adr/0002-branch-strategy.md）
+  pr-target:
+    name: pr-target
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: 检查来源分支
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "来源：${HEAD_REPO}:${HEAD_REF} → main"
+          # 来源必须是本仓库的分支，复刻仓库中同名的 develop 不算
+          if [[ "$HEAD_REPO" == "$REPO" && ( "$HEAD_REF" == "develop" || "$HEAD_REF" == hotfix/* ) ]]; then
+            echo "来源分支符合要求"
+            exit 0
+          fi
+          echo "::error::main 只接收本仓库的 develop 和 hotfix/* 分支。功能分支请把 PR 的目标分支改为 develop"
+          exit 1
+
+  # PR 改动了锁定目录、却没有 unlock 标签时失败（见 docs/tasks/README.md 的「锁定」一节）
+  locked-paths:
+    name: locked-paths
+    needs: changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: 检查锁定目录
+        env:
+          FILES: ${{ needs.changes.outputs.files }}
+          UNLOCKED: ${{ contains(github.event.pull_request.labels.*.name, 'unlock') }}
+        run: |
+          # 锁定清单从基础分支读取（合并提交的第一个父提交），
+          # 防止 PR 先删掉某条锁定、再修改对应的目录
+          locks="$(git show HEAD^1:docs/tasks/locked-paths.txt 2>/dev/null || true)"
+
+          # 与 .claude/hooks/check-locked-paths.sh 的规则一致：去掉 # 后的注释和首尾空白，按前缀匹配
+          hits=()
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            while IFS= read -r line; do
+              lock="$(sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<<"$line")"
+              [[ -n "$lock" ]] || continue
+              if [[ "$file" == "$lock"* ]]; then
+                hits+=("${file}（锁定路径：${lock}）")
+                break
+              fi
+            done <<<"$locks"
+          done <<<"$FILES"
+
+          if [[ ${#hits[@]} -eq 0 ]]; then
+            echo "没有改动锁定目录"
+            exit 0
+          fi
+
+          echo "以下文件位于锁定目录中："
+          printf '  %s\n' "${hits[@]}"
+
+          if [[ "$UNLOCKED" == "true" ]]; then
+            echo "::notice::PR 有 unlock 标签，放行。请由对应模块的负责人审批"
+            exit 0
+          fi
+
+          echo "::error::PR 改动了锁定目录，但没有 unlock 标签"
+          cat <<'EOF'
+          处理方法（详见 docs/tasks/README.md 的「锁定」一节）：
+            1. 如果是顺手改的，撤销对这些文件的修改。
+            2. 确实需要修改时，先和该模块的负责人沟通改什么、为什么改。
+            3. 负责人同意后，在 PR 上添加 unlock 标签，CI 会自动重新运行。
+            4. 由该模块的负责人审批 PR。
+          EOF
+          exit 1
+
   # 规则集中唯一的必需检查：汇总上面所有 job 的结果
   ci-required:
     name: ci-required
     if: always()
-    needs: [changes, actionlint, frontend-web, contract]
+    needs: [changes, actionlint, frontend-web, contract, pr-target, locked-paths]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
