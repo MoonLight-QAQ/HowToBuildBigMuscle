@@ -13,7 +13,7 @@ function validatePage(value: number, maximum = Number.MAX_SAFE_INTEGER): void {
     throw new RangeError('invalid-pagination')
 }
 
-/** 管理页面本地分页状态；参数为已校验数据的加载器。 / Manage local paging using a validated-data loader.
+/** 管理页面本地分页状态；loader通过闭包读取筛选，筛选变化调用reload(true)。 / Read filters in the loader closure; reset with reload(true).
  * 返回/Returns: 只读状态和命名操作 / Readonly state and actions.
  * 副作用/Effects: 显式加载时调用loader；取消旧请求、忽略迟到结果；作用域销毁时取消 / Calls loader on demand and cancels on disposal.
  */
@@ -35,7 +35,13 @@ export function useTable<T>(
   const loaded = ref(false)
   /** 仅成功加载的空集合是空态；无参数、无副作用。 / Only a successful empty result is empty state. */
   const empty = computed(function isEmpty() {
-    return loaded.value && !loading.value && error.value === null && items.value.length === 0
+    return (
+      loaded.value &&
+      !loading.value &&
+      error.value === null &&
+      items.value.length === 0 &&
+      total.value === 0
+    )
   })
 
   /** 取消当前加载并废弃未返回的数据；无参数，返回void。 / Cancel and invalidate pending work; returns void. */
@@ -46,8 +52,8 @@ export function useTable<T>(
     loading.value = false
   }
 
-  /** 加载当前页；无参数，成功返回true，失败或过时返回false。 / Load current page; return false for failure or stale work.
-   * 副作用/Effects: 调用loader并更新本页状态，错误仅暴露给调用者处理 / Call loader, update state, expose errors for caller handling.
+  /** 加载当前页，最多补取一次缩短后的末页。 / Load a page and recover a shortened last page at most once.
+   * 参数/Params: 无。返回/Returns: 成功true，失败/过时false；失败保留上次数据，须按error显示错误 / Preserve prior rows on failure; render error explicitly.
    */
   async function load(): Promise<boolean> {
     if (disposed) return false
@@ -55,28 +61,41 @@ export function useTable<T>(
     const request = sequence
     const current = new AbortController()
     controller = current
+    let requestedPage = page.value
+    const requestedSize = pageSize.value
     loading.value = true
     loaded.value = false
     error.value = null
-    items.value = []
-    total.value = 0
+    // 保留有效总数，避免分页器把待加载页改回1。 / Retain totals so pagination cannot reset a pending page to one.
     try {
-      const result = await loader({
-        page: page.value,
-        pageSize: pageSize.value,
-        signal: current.signal,
-      })
-      if (request !== sequence || current.signal.aborted) return false
-      if (
-        !Array.isArray(result.items) ||
-        !Number.isSafeInteger(result.total) ||
-        result.total < result.items.length
-      )
-        throw new TypeError('invalid-table-result')
-      items.value = [...result.items]
-      total.value = result.total
-      loaded.value = true
-      return true
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = await loader({
+          page: requestedPage,
+          pageSize: requestedSize,
+          signal: current.signal,
+        })
+        if (request !== sequence || current.signal.aborted) return false
+        if (
+          !Array.isArray(result.items) ||
+          !Number.isSafeInteger(result.total) ||
+          result.total < result.items.length
+        )
+          throw new TypeError('invalid-table-result')
+        if (result.items.length === 0 && result.total > 0) {
+          const lastPage = Math.ceil(result.total / requestedSize)
+          if (attempt > 0 || requestedPage <= lastPage)
+            throw new TypeError('inconsistent-table-page')
+          requestedPage = lastPage
+          page.value = requestedPage
+          continue
+        }
+        if (result.total === 0) page.value = 1
+        items.value = [...result.items]
+        total.value = result.total
+        loaded.value = true
+        return true
+      }
+      return false
     } catch (cause) {
       if (request === sequence && !current.signal.aborted)
         error.value = cause ?? new Error('table-load-failed')
@@ -89,19 +108,19 @@ export function useTable<T>(
     }
   }
 
-  /** 刷新当前或第一页；参数决定是否重置页码，返回加载结果。 / Reload, optionally reset to page one; return load result. */
+  /** 刷新当前或第一页；筛选变化传true，返回加载结果。 / Pass true after filter changes to load page one. */
   function reload(resetPage = false): Promise<boolean> {
     if (resetPage) page.value = 1
     return load()
   }
-  /** 切换页码并加载；非法页码抛错，返回加载结果。 / Validate and load another page; invalid values throw. */
-  function setPage(value: number): Promise<boolean> {
+  /** 切换页码并加载；非法页码返回拒绝的Promise，不改状态。 / Invalid page values reject the promise without mutation. */
+  async function setPage(value: number): Promise<boolean> {
     validatePage(value)
     page.value = value
     return load()
   }
-  /** 修改每页条数并回第一页；只接受1至100整数，返回加载结果。 / Set size from 1 to 100 and load page one. */
-  function setPageSize(value: number): Promise<boolean> {
+  /** 修改条数并回第一页；非法值返回拒绝的Promise。 / Set size from 1 to 100; invalid values reject the promise. */
+  async function setPageSize(value: number): Promise<boolean> {
     validatePage(value, 100)
     pageSize.value = value
     return reload(true)

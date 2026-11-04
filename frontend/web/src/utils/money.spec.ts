@@ -1,5 +1,7 @@
 import { expect, it } from 'vitest'
-import { formatCents, formatMoney, parseAmountToCents } from './money'
+import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import { displayMoney, formatCents, formatMoney, parseAmountToCents } from './money'
 
 /** 中文：金额由十进制字符串精确转为整数分。 English: Parse decimal dollars into exact safe integer cents. */
 it.each([
@@ -74,4 +76,41 @@ it('错误类型不能被隐式转换成金额', function testInvalidRuntimeType
   expect(() => parseAmountToCents(null)).toThrow(RangeError)
   // @ts-expect-error 验证来自运行时的不可信类型。 / Probe untrusted runtime input.
   expect(() => formatCents(null)).toThrow(RangeError)
+})
+
+/** 中文：显示层区分真实零值和非法资料。 English: Preserve real zero while invalid display values use a placeholder. */
+it.each([null, undefined, '', '3909', false, {}, NaN, Infinity, 0.1, Number.MAX_SAFE_INTEGER + 1])(
+  '非法分值显示为占位符 %j',
+  function testSafeMoneyPlaceholder(value) {
+    expect(displayMoney(value)).toBe('—')
+  },
+)
+
+/** 中文：合法金额保留精确值和币种，零不显示占位。 English: Keep exact valid amounts, currency and an explicit zero. */
+it.each([
+  [0, 'A$ 0.00'],
+  [3909, 'A$ 39.09'],
+  [-125, 'A$ -1.25'],
+  [Number.MAX_SAFE_INTEGER, 'A$ 90071992547409.91'],
+])('安全显示整数分 %s', function testSafeMoneyValue(value, expected) {
+  expect(displayMoney(value)).toBe(expected)
+})
+
+/** 中文：真实Vue渲染中单个非法单元格不影响合法行。 English: Invalid money cells must not abort a real Vue render. */
+it('金额单元格异常不造成整页渲染失败', function testMoneyRenderIsolation() {
+  const MoneyCells = defineComponent({
+    /** 中文：渲染测试单元格，无参数，返回VNode，不读写外部资料。 English: Return fixture cells without external effects. */
+    render() {
+      return h('div', [
+        h('span', { 'data-cell': 'invalid' }, displayMoney(null)),
+        h('span', { 'data-cell': 'zero' }, displayMoney(0)),
+        h('span', { 'data-cell': 'valid' }, displayMoney(3909)),
+      ])
+    },
+  })
+  const view = mount(MoneyCells)
+  expect(view.get('[data-cell="invalid"]').text()).toBe('—')
+  expect(view.get('[data-cell="zero"]').text()).toBe('A$ 0.00')
+  expect(view.get('[data-cell="valid"]').text()).toBe('A$ 39.09')
+  view.unmount()
 })

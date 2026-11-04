@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { useId } from 'vue'
-import { ElInput } from 'element-plus'
+import { ElFormItem, ElInput } from 'element-plus'
 
-withDefaults(defineProps<{ disabled?: boolean; maxlength?: number; required?: boolean }>(), {
-  disabled: false,
-  required: true,
-})
+withDefaults(
+  defineProps<{
+    disabled?: boolean
+    maxlengthZh?: number
+    maxlengthEn?: number
+    required?: boolean
+    propZh?: string
+    propEn?: string
+  }>(),
+  { disabled: false, required: true },
+)
 // 父模型均初始化为空串，避免默认值不同步；保留输入供外层校验。 / Initialize both parent models to ''; preserve input.
 const zh = defineModel<string>('zh', { default: '' })
 const en = defineModel<string>('en', { default: '' })
@@ -14,34 +21,43 @@ const id = useId()
 
 <template>
   <div class="bilingual-input">
-    <div class="bilingual-input__field">
-      <label :for="`${id}-zh`">中文</label>
+    <ElFormItem
+      :prop="propZh"
+      label="中文"
+      :for="`${id}-zh`"
+      label-position="top"
+      :required="required"
+    >
       <ElInput
         :id="`${id}-zh`"
         v-model="zh"
         :disabled="disabled"
-        :maxlength="maxlength"
+        :maxlength="maxlengthZh"
         :required="required"
         :aria-required="required"
       />
-    </div>
-    <div class="bilingual-input__field">
-      <label :for="`${id}-en`">英文</label>
+    </ElFormItem>
+    <ElFormItem
+      :prop="propEn"
+      label="英文"
+      :for="`${id}-en`"
+      label-position="top"
+      :required="required"
+    >
       <ElInput
         :id="`${id}-en`"
         v-model="en"
         :disabled="disabled"
-        :maxlength="maxlength"
+        :maxlength="maxlengthEn"
         :required="required"
         :aria-required="required"
       />
-    </div>
+    </ElFormItem>
   </div>
 </template>
 
 <style scoped lang="scss">
-.bilingual-input,
-.bilingual-input__field {
+.bilingual-input {
   display: grid;
   gap: $space-sm;
 }

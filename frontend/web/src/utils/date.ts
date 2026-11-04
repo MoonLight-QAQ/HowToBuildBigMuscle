@@ -1,4 +1,4 @@
-/** 校验城市当地日期，不按时区移动。 / Validate a city-local date without shifting its calendar day.
+/** 校验并以契约格式显示城市当地日期，不按时区移动。 / Validate and display a local date in its contract format.
  * 参数/Params: YYYY-MM-DD。返回/Returns: 原日期；非法日期抛 RangeError，无副作用 / Same date or RangeError.
  */
 export function formatLocalDate(value: string): string {
@@ -12,7 +12,7 @@ export function formatLocalDate(value: string): string {
   return value
 }
 
-/** 校验当地24小时钟点，不将它转换成时间点。 / Validate a local clock without inventing an instant.
+/** 校验并以契约格式显示当地24小时钟点，不构造时间点。 / Validate and display local clock text without inventing an instant.
  * 参数/Params: HH:mm。返回/Returns: 原钟点；非法值抛 RangeError，无副作用 / Same clock or RangeError.
  */
 export function formatClockTime(value: string): string {
@@ -55,4 +55,40 @@ export function formatDateTime(utc: string, timeZone: string): string {
   if (values.era !== 'AD' || !/^\d{1,4}$/.test(year))
     throw new RangeError('时间点超出四位公历年份范围')
   return `${year.padStart(4, '0')}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`
+}
+
+/** 安全显示城市时间，非法值只影响当前单元格。 / Safely display a city instant without breaking other cells.
+ * 参数/Params: 未知UTC时间与城市时区 / Unknown UTC instant and zone. 返回/Returns: 时间文本或“—”，无日志/副作用 / Text or placeholder; no effects.
+ */
+export function displayDateTime(utc: unknown, timeZone: unknown): string {
+  if (typeof utc !== 'string' || typeof timeZone !== 'string') return '—'
+  try {
+    return formatDateTime(utc, timeZone)
+  } catch {
+    return '—'
+  }
+}
+
+/** 安全显示当地日期，保留契约的年-月-日格式。 / Safely display a local date in its contract format.
+ * 参数/Params: 未知日期 / Unknown date. 返回/Returns: 日期文本或“—”，无日志/副作用 / Date text or placeholder; no effects.
+ */
+export function displayLocalDate(value: unknown): string {
+  if (typeof value !== 'string') return '—'
+  try {
+    return formatLocalDate(value)
+  } catch {
+    return '—'
+  }
+}
+
+/** 安全显示当地钟点，不改变时区。 / Safely display local clock text without changing zones.
+ * 参数/Params: 未知钟点 / Unknown clock. 返回/Returns: HH:mm或“—”，无日志/副作用 / Clock text or placeholder; no effects.
+ */
+export function displayClockTime(value: unknown): string {
+  if (typeof value !== 'string') return '—'
+  try {
+    return formatClockTime(value)
+  } catch {
+    return '—'
+  }
 }

@@ -1,7 +1,17 @@
-import { afterEach, expect, it } from 'vitest'
-import { defineComponent, h, nextTick } from 'vue'
+/// <reference types="node" />
+import { afterEach, expect, it, vi } from 'vitest'
+import { defineComponent, h, nextTick, reactive, ref } from 'vue'
+import { ElForm, type FormInstance } from 'element-plus'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import BilingualInput from './BilingualInput.vue'
+
+/** 中文：选择包自身真实CJS构建，避免Node的ESM/CJS默认导出歧义；不替换校验逻辑。
+ * English: Load the real CJS build to match Node interop, preserving actual form validation.
+ */
+vi.mock('element-plus', async function loadRealElementPlusCjs() {
+  const { createRequire } = await import('node:module')
+  return createRequire(import.meta.url)('element-plus') as typeof import('element-plus')
+})
 
 const wrappers: VueWrapper[] = []
 
@@ -48,15 +58,101 @@ it('分别发出中英模型更新，并响应外部值变化', async function t
 /** 中文：组件原样转交禁用、长度与可选字段配置。 English: Forward disabled, maxlength and required attributes. */
 it('支持禁用、长度限制及取消必填', function testInputOptions() {
   const wrapper = mount(BilingualInput, {
-    props: { disabled: true, maxlength: 30, required: false },
+    props: { disabled: true, maxlengthZh: 60, maxlengthEn: 120, required: false },
   })
   wrappers.push(wrapper)
-  for (const input of wrapper.findAll('input')) {
+  for (const [index, input] of wrapper.findAll('input').entries()) {
     expect(input.element.disabled).toBe(true)
-    expect(input.element.maxLength).toBe(30)
+    expect(input.element.maxLength).toBe(index === 0 ? 60 : 120)
     expect(input.element.required).toBe(false)
     expect(input.attributes('aria-required')).toBe('false')
   }
+})
+
+/** 中文：真实表单分别校验中英文并单独清除错误。 English: Validate and clear each field independently in ElForm. */
+it('用 propZh/propEn 接入真实 ElForm，必填和长度错误分别校验', async function testFormIntegration() {
+  const form = ref<FormInstance>()
+  const model = reactive({ nameZh: '', nameEn: '' })
+  const rules = {
+    nameZh: [
+      { required: true, message: '请填写中文', trigger: 'blur' },
+      { max: 2, message: '中文最多两个字符', trigger: 'blur' },
+    ],
+    nameEn: [
+      { required: true, message: '请填写英文', trigger: 'blur' },
+      { max: 6, message: '英文最多六个字符', trigger: 'blur' },
+    ],
+  }
+  /** 中文：同步中文模型，无返回；更新本测试表单。 English: Update the Chinese test field; returns void. */
+  function updateZh(value: string): void {
+    model.nameZh = value
+  }
+  /** 中文：同步英文模型，无返回；更新本测试表单。 English: Update the English test field; returns void. */
+  function updateEn(value: string): void {
+    model.nameEn = value
+  }
+  /** 中文：渲染受控双语字段，无外部副作用。 English: Render controlled bilingual form fields without external effects. */
+  function renderFields() {
+    return h(BilingualInput, {
+      zh: model.nameZh,
+      en: model.nameEn,
+      'onUpdate:zh': updateZh,
+      'onUpdate:en': updateEn,
+      propZh: 'nameZh',
+      propEn: 'nameEn',
+      maxlengthZh: 2,
+      maxlengthEn: 6,
+    })
+  }
+  /** 中文：渲染真实 ElForm 并暴露校验实例。 English: Render a real ElForm and expose its validation instance. */
+  function renderForm() {
+    return h(ElForm, { ref: form, model, rules }, { default: renderFields })
+  }
+  const wrapper = mount(defineComponent({ render: renderForm }))
+  wrappers.push(wrapper)
+  await nextTick()
+  expect(form.value!.fields).toHaveLength(2)
+  expect(form.value!.fields.map((field) => field.prop)).toEqual(['nameZh', 'nameEn'])
+  expect(form.value!.fields.map((field) => field.fieldValue)).toEqual(['', ''])
+  expect(form.value!.fields.map((field) => field.required)).toEqual([true, true])
+  await expect(form.value!.validate()).rejects.toHaveProperty('nameZh')
+  const fields = wrapper.findAll('.el-form-item')
+  /** 中文：等待真实表单的防抖错误显示。 English: Await the form's debounced required messages. */
+  function expectRequiredErrors(): void {
+    expect(fields[0]!.find('.el-form-item__error').text()).toBe('请填写中文')
+    expect(fields[1]!.find('.el-form-item__error').text()).toBe('请填写英文')
+  }
+  await vi.waitFor(expectRequiredErrors)
+  const inputs = wrapper.findAll('input')
+  await inputs[0]!.setValue('悉尼')
+  await inputs[0]!.trigger('blur')
+  /** 中文：中文修正后只清除中文错误。 English: Clear only the corrected Chinese field. */
+  function expectChineseCleared(): void {
+    expect(fields[0]!.find('.el-form-item__error').exists()).toBe(false)
+    expect(fields[1]!.find('.el-form-item__error').text()).toBe('请填写英文')
+  }
+  await vi.waitFor(expectChineseCleared)
+  await inputs[1]!.setValue('SydneyX')
+  await inputs[1]!.trigger('blur')
+  /** 中文：英文使用独立长度规则。 English: Assert the independent English length rule. */
+  function expectEnglishLengthError(): void {
+    expect(fields[1]!.find('.el-form-item__error').text()).toBe('英文最多六个字符')
+  }
+  await vi.waitFor(expectEnglishLengthError)
+  await inputs[1]!.setValue('Sydney')
+  await inputs[1]!.trigger('blur')
+  /** 中文：英文修正后清除剩余错误。 English: Clear the remaining error after valid English input. */
+  function expectEnglishCleared(): void {
+    expect(fields[1]!.find('.el-form-item__error').exists()).toBe(false)
+  }
+  await vi.waitFor(expectEnglishCleared)
+  await expect(form.value!.validate()).resolves.toBe(true)
+  expect(model).toEqual({ nameZh: '悉尼', nameEn: 'Sydney' })
+  expect(form.value!.fields.map((field) => field.fieldValue)).toEqual(['悉尼', 'Sydney'])
+  form.value!.resetFields()
+  await nextTick()
+  expect(model).toEqual({ nameZh: '', nameEn: '' })
+  expect(inputs.map((input) => input.element.value)).toEqual(['', ''])
 })
 
 /** 中文：同一表单多个组件实例不能复用输入 ID。 English: Multiple instances in one app have unique IDs. */

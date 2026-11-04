@@ -31,3 +31,15 @@ export function formatCents(cents: number): string {
 export function formatMoney(cents: number): string {
   return `A$ ${formatCents(cents)}`
 }
+
+/** 安全显示澳元，单个非法值不打断页面渲染。 / Display AUD without breaking rendering on invalid data.
+ * 参数/Params: 未知分值 / Unknown cents. 返回/Returns: 澳元文本或“—”；无日志及副作用 / AUD text or placeholder; no logging/effects.
+ */
+export function displayMoney(cents: unknown): string {
+  if (typeof cents !== 'number') return '—'
+  try {
+    return formatMoney(cents)
+  } catch {
+    return '—'
+  }
+}

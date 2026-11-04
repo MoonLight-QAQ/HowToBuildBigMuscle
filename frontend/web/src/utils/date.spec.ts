@@ -1,5 +1,14 @@
 import { expect, it } from 'vitest'
-import { formatClockTime, formatDateTime, formatLocalDate } from './date'
+import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import {
+  displayClockTime,
+  displayDateTime,
+  displayLocalDate,
+  formatClockTime,
+  formatDateTime,
+  formatLocalDate,
+} from './date'
 
 /** 中文：按真实城市时区处理冬夏令时和跨日。 English: Apply city zones, DST transitions and day rollover. */
 it.each([
@@ -75,3 +84,62 @@ it.each(['24:00', '12:60', '8:00', '08:00:00', '', ' 08:00'])(
     expect(() => formatClockTime(value)).toThrow(RangeError)
   },
 )
+
+/** 中文：缺失和不合法的时间点或时区不会传出渲染异常。 English: Missing/invalid instants or zones never escape as render errors. */
+it.each([
+  [null, 'Australia/Sydney'],
+  [undefined, 'Australia/Sydney'],
+  ['2026-02-30T00:00:00Z', 'Australia/Sydney'],
+  ['2026-11-01T00:00:00Z', null],
+  ['2026-11-01T00:00:00Z', 'Invalid/City'],
+  ['2026-11-01T00:00:00', 'Australia/Sydney'],
+])('安全显示拒绝非法时间 %j / %j', function testSafeInstantPlaceholder(value, zone) {
+  expect(displayDateTime(value, zone)).toBe('—')
+})
+
+/** 中文：安全显示仍按指定城市处理夏令时。 English: Safe display retains the requested city zone and DST. */
+it('安全时间显示不依赖本机时区', function testSafeCityTime() {
+  expect(displayDateTime('2026-11-01T15:00:00Z', 'Australia/Sydney')).toBe('2026-11-02 02:00:00')
+})
+
+/** 中文：当地日期和钟点的非法资料以占位区分，不伪造零时。 English: Invalid local values use a placeholder, never invented midnight. */
+it.each([null, undefined, '', false, {}, 0])(
+  '安全当地显示区分缺失值 %j',
+  function testSafeLocalPlaceholder(value) {
+    expect(displayLocalDate(value)).toBe('—')
+    expect(displayClockTime(value)).toBe('—')
+  },
+)
+
+/** 中文：合法当地文本保持契约格式，非法文本不抛出。 English: Preserve canonical local text and safely reject malformed text. */
+it('安全当地显示保持原日期与24小时钟点', function testSafeLocalValue() {
+  expect(displayLocalDate('2026-11-02')).toBe('2026-11-02')
+  expect(displayClockTime('00:00')).toBe('00:00')
+  expect(displayLocalDate('2026-02-30')).toBe('—')
+  expect(displayClockTime('24:00')).toBe('—')
+})
+
+/** 中文：真实Vue组件内错误时间单元格不影响其他行。 English: Bad time cells do not abort a real Vue component render. */
+it('时间单元格异常不造成整页渲染失败', function testDateRenderIsolation() {
+  const DateCells = defineComponent({
+    /** 中文：返回混合有效性测试单元格，无参数及外部副作用。 English: Return mixed-validity fixture cells without effects. */
+    render() {
+      return h('div', [
+        h('span', { 'data-cell': 'invalid' }, displayDateTime('invalid', 'Australia/Sydney')),
+        h(
+          'span',
+          { 'data-cell': 'valid' },
+          displayDateTime('2026-11-01T00:00:00Z', 'Australia/Sydney'),
+        ),
+        h('span', { 'data-cell': 'date' }, displayLocalDate('2026-11-02')),
+        h('span', { 'data-cell': 'clock' }, displayClockTime('08:00')),
+      ])
+    },
+  })
+  const view = mount(DateCells)
+  expect(view.get('[data-cell="invalid"]').text()).toBe('—')
+  expect(view.get('[data-cell="valid"]').text()).toBe('2026-11-01 11:00:00')
+  expect(view.get('[data-cell="date"]').text()).toBe('2026-11-02')
+  expect(view.get('[data-cell="clock"]').text()).toBe('08:00')
+  view.unmount()
+})
