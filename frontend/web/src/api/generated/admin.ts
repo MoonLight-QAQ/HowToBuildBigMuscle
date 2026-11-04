@@ -1339,7 +1339,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description 页码，从 1 开始 */
+        /** @description 页码，从 1 开始（CI 验证用，勿合并） */
         Page: number;
         /** @description 每页条数 */
         PageSize: number;
@@ -1385,7 +1385,7 @@ export interface operations {
     listOrders: {
         parameters: {
             query?: {
-                /** @description 页码，从 1 开始 */
+                /** @description 页码，从 1 开始（CI 验证用，勿合并） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
                 pageSize?: components["parameters"]["PageSize"];
@@ -1539,7 +1539,7 @@ export interface operations {
     listRefunds: {
         parameters: {
             query?: {
-                /** @description 页码，从 1 开始 */
+                /** @description 页码，从 1 开始（CI 验证用，勿合并） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
                 pageSize?: components["parameters"]["PageSize"];
@@ -1693,7 +1693,7 @@ export interface operations {
     listReports: {
         parameters: {
             query?: {
-                /** @description 页码，从 1 开始 */
+                /** @description 页码，从 1 开始（CI 验证用，勿合并） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
                 pageSize?: components["parameters"]["PageSize"];
@@ -1968,7 +1968,7 @@ export interface operations {
     listListings: {
         parameters: {
             query?: {
-                /** @description 页码，从 1 开始 */
+                /** @description 页码，从 1 开始（CI 验证用，勿合并） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
                 pageSize?: components["parameters"]["PageSize"];
