@@ -184,7 +184,7 @@ tags:
   - name: product
     description: 商品
   - name: delivery
-    description: 配送（费用、时段、区）
+    description: 配送（费用、时段、配送大区、suburb）
   - name: upload
     description: 图片上传
   # C @celine-hy
