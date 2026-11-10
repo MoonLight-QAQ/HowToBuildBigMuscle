@@ -233,8 +233,12 @@ paths:
                         - id: "9000000000000000040"
                           nameZh: 演示城市
                           fulfillment: local
-                          deliverableDistrictNamesZh:
+                          deliverableZoneNamesZh:
                             - 演示区域
+                        - id: "9000000000000000041"
+                          nameZh: 演示快递城市
+                          fulfillment: post
+                          deliverableZoneNamesZh: []
                       localFeeCents: 600
                       postFeeCents: 1000
                       freeShippingThresholdCents: 10000
@@ -369,8 +373,10 @@ paths:
                       address: &a2
                         formatted: 演示地址，请勿配送
                         street: 示例街道
-                        districtNameZh: 演示区域
+                        zoneNameZh: 演示区域
+                        suburb: Example Suburb
                         postcode: "2000"
+                        state: NSW
                       deliveryDate: 2026-11-02
                       slotNameZh: 演示时段
                       remark: null
@@ -1729,6 +1735,18 @@ components:
 
     # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
 
+    AustralianState:
+      type: string
+      enum:
+        - NSW
+        - VIC
+        - QLD
+        - WA
+        - SA
+        - TAS
+        - ACT
+        - NT
+      description: 澳洲州和领地的标准大写缩写；本定义位于 A 区，供订单地址快照引用。
     OrderStatus:
       type: string
       enum:
@@ -1830,20 +1848,31 @@ components:
         street:
           type: string
           maxLength: 150
-        districtNameZh:
+        zoneNameZh:
           anyOf:
             - type: string
               maxLength: 60
             - type: "null"
+          description: 下单时配送大区中文名的快照；快递订单允许为 null，不按当前大区名称回算。
+        suburb:
+          type: string
+          maxLength: 40
+          description: 下单时 suburb 名称的快照，线下和快递订单均必返。
         postcode:
           type: string
           pattern: ^[0-9]{4}$
           description: 四位邮编，按字符串保留。
+        state:
+          $ref: "#/components/schemas/AustralianState"
+          description: 下单时所属州的快照，线下和快递订单均必返。
       required:
         - formatted
         - street
-        - districtNameZh
+        - zoneNameZh
+        - suburb
         - postcode
+        - state
+      description: 下单时保存的地址快照；后续大区、成员或 suburb 字典变化不改写本对象。新字段不得根据当前配置反推历史值。
     OrderListItem:
       type: object
       additionalProperties: false
@@ -2050,8 +2079,10 @@ components:
           address:
             formatted: 演示地址，请勿配送
             street: 示例街道
-            districtNameZh: 演示区域
+            zoneNameZh: 演示区域
+            suburb: Example Suburb
             postcode: "2000"
+            state: NSW
           deliveryDate: 2026-11-02
           slotNameZh: 演示时段
           remark: null
@@ -2446,16 +2477,28 @@ components:
           maxLength: 40
         fulfillment:
           $ref: "#/components/schemas/Fulfillment"
-        deliverableDistrictNamesZh:
+        deliverableZoneNamesZh:
           type: array
           items:
             type: string
             maxLength: 40
+          description: 线下城市中至少有一个最终可送 suburb 的配送大区中文名，按大区 sort 排序。默认不可送但有成员覆盖为可送时纳入；默认可送但成员全部不可送时不纳入。快递城市为 []，不据此推断快递服务范围为空。
       required:
         - id
         - nameZh
         - fulfillment
-        - deliverableDistrictNamesZh
+        - deliverableZoneNamesZh
+      allOf:
+        - if:
+            properties:
+              fulfillment:
+                const: post
+            required:
+              - fulfillment
+          then:
+            properties:
+              deliverableZoneNamesZh:
+                maxItems: 0
     Summary:
       type: object
       additionalProperties: false
@@ -2484,6 +2527,7 @@ components:
             $ref: "#/components/schemas/CityOverview"
         localFeeCents:
           $ref: "#/components/schemas/Cents"
+          description: 全店默认线下配送费；配送大区可覆盖。此值不是每张订单的最终运费，也不用于快递邮费；已有订单继续读取 shippingFeeCents 快照。
         postFeeCents:
           $ref: "#/components/schemas/Cents"
         freeShippingThresholdCents:

@@ -48,3 +48,7 @@ frontend/web/src/types/
 frontend/web/src/components/
 frontend/web/src/composables/
 frontend/web/src/utils/
+
+# W-00e A 区配送字段迁移（#62）
+# 共享契约沿用 PR #37 按区块审查；生成文件和任务索引不锁整份。
+docs/api/a-delivery-contract-migration.md
