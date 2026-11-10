@@ -196,7 +196,7 @@
 
 CityOverview：`{ id, nameZh, fulfillment, deliverableZoneNamesZh: string[] }`。
 
-`deliverableZoneNamesZh`：这个城市中**至少有一个最终可送 suburb** 的配送大区的中文名，按大区的 `sort` 排序。【建议】不只看大区的 `deliverable`：大区设为可送、但其中的 suburb 全部被单独设为不可送时，这个大区不算可送。快递城市为 `[]`。
+`deliverableZoneNamesZh`：这个城市中**至少有一个最终可送 suburb** 的配送大区的中文名，按大区的 `sort` 排序。不只看大区的 `deliverable`：大区默认不可送、但其中有 suburb 被单独设为可送时，这个大区算可送；大区默认可送、但其中的 suburb 全部被单独设为不可送时，这个大区不算可送。快递城市为 `[]`。
 
 ---
 
@@ -252,18 +252,20 @@ CityOverview：`{ id, nameZh, fulfillment, deliverableZoneNamesZh: string[] }`�
 | 字段 | 类型 | 来源 | 说明 |
 | --- | --- | --- | --- |
 | `id` | id | | |
-| `cityId` | id | 录入 | 所属城市。**创建后不能修改**【建议】 |
-| `nameZh` | string(20) | 录入 | 必填。同一城市内不能重复【建议】 |
-| `nameEn` | string(40) | 录入 | 必填。同一城市内不能重复【建议】 |
-| `deliverable` | bool | 录入 | 大区内 suburb 的**默认**可送设置 |
-| `localFeeCents` | cents? | 录入 | 这个大区的线下配送费，≥ 0。为 `null` 时使用全店统一配送费 |
+| `cityId` | id | 录入 | 所属城市。**创建后不能修改** |
+| `nameZh` | string(20) | 录入 | 必填。同一城市内不能重复 |
+| `nameEn` | string(40) | 录入 | 必填。同一城市内不能重复 |
+| `deliverable` | bool | 录入 | 大区内 suburb 的**默认**可送设置。只对线下订单生效 |
+| `localFeeCents` | cents? | 录入 | 这个大区的线下配送费，≥ 0。为 `null` 时使用全店统一配送费。只对线下订单生效 |
 | `sort` | int | 录入 | |
 | `suburbCount` | int | 计算 | 大区内的 suburb 数 |
 
 - 大区**不能删除**。不再使用时，把其中的 suburb 移出。
-- 同一城市内名称重复时，返回 `NAME_DUPLICATED`【建议】。
-- 修改 `cityId` 会让大区成员与新城市的州不一致，所以创建后不能修改，修改接口的请求体中不包含 `cityId`【建议】。
-- 配送大区只对线下城市有意义。快递城市全市可下单，不检查大区。
+- 同一城市内名称重复时，返回 `NAME_DUPLICATED`。
+- 修改 `cityId` 会让大区成员与新城市的州不一致，所以创建后不能修改，修改接口的请求体中不包含 `cityId`。
+- 配送大区有两个作用：
+  - **圈定城市的服务范围**，对线下城市和快递城市都适用：城市的所有大区中的 suburb，就是这个城市的范围。
+  - **线下配送的可送和运费设置**，只对线下订单生效。快递城市的大区只用于圈定范围，`deliverable`、`localFeeCents` 和成员的 `deliverableOverride` 都不起作用。
 - 以后的阶梯运费规则挂在配送大区上，这一版不实现。
 
 ### ZoneSuburb 大区成员
@@ -281,14 +283,31 @@ suburb 与配送大区的关联。
 
 ### 配送规则
 
+**大区成员**
+
 1. 一个 suburb **最多属于一个**配送大区。加入第二个大区时，返回 `SUBURB_IN_OTHER_ZONE`，需要先从原来的大区移出。
 2. 加入大区的 suburb，`state` 必须与大区所属城市的 `state` 一致，否则返回 `SUBURB_STATE_MISMATCH`。
-3. suburb 必须加入某个大区才可能被配送。**不属于任何大区的 suburb 一律不可送。**
-4. suburb 属于哪个城市，由它所在大区的城市决定。
-5. **最终可送** = `deliverableOverride` 不为 `null` 时取它，否则取大区的 `deliverable`。
-6. **实际运费**（只对线下订单）= 大区的 `localFeeCents` 不为 `null` 时取它，否则取全店统一配送费 `DeliveryConfig.localFeeCents`。
-7. 线下城市中没有任何最终可送的 suburb 时，下单返回 `NO_DELIVERY_AREA`；地址所在的 suburb 不可送时，返回 `ADDRESS_NOT_DELIVERABLE`。
-8. 可送和运费以服务器为准。修改只影响之后的新订单，已有订单的运费和地址快照不变。
+
+**地址属于哪个城市**（线下和快递相同）
+
+3. 保存地址时，服务器用 `placeId` 向地图服务重新取一次详情，不信任前端提交的地址；再用取回的 suburb 名称、邮编和州，按 `name + postcode + state` 匹配字典中的 suburb。
+4. suburb 属于哪个城市，由它所在大区的城市决定。地址属于某个城市，当且仅当它的 suburb 属于这个城市的某个配送大区。**不能只凭州相同就认定属于本市。**
+5. 匹配不到字典中的 suburb，或 suburb 不属于当前城市的任何大区时，地址越界，不能保存，返回 `PLACE_OUTSIDE`。
+
+**线下订单**（以下规则只对线下订单生效）
+
+6. 未加入任何配送大区的 suburb 不可配送（由第 5 条，这样的地址也无法保存）。
+7. **最终可送** = `deliverableOverride` 不为 `null` 时取它，否则取大区的 `deliverable`。属于本市但不可送的地址，仍然可以保存，结算时返回 `ADDRESS_NOT_DELIVERABLE`。
+8. **实际运费** = 大区的 `localFeeCents` 不为 `null` 时取它，否则取全店统一配送费 `DeliveryConfig.localFeeCents`。
+9. 线下城市中没有任何最终可送的 suburb 时，下单返回 `NO_DELIVERY_AREA`。
+
+**快递订单**
+
+10. 地址属于本市（第 4 条）即可下单，**不检查**可送设置，也不使用大区的运费；邮费按 `DeliveryConfig` 的快递邮费和包邮门槛计算。
+
+**通用**
+
+11. 可送和运费以服务器为准。修改大区、成员或运费，只影响之后的新订单；已有订单的地址和运费使用下单时的快照，不按新的配置重新计算。
 
 ### DeliveryConfig 配送费用
 
@@ -412,9 +431,11 @@ UserBrief：`{ id, nickname }`。
 
 AddressSnapshot：`{ formatted, street, suburb, postcode, state, zoneNameZh }`。
 
-- `suburb`：string，下单时地址所在 suburb 的名称快照。快递订单也必填【建议】。
-- `state`：enum AustralianState。快递订单也必填【建议】。
+- `suburb`：string，下单时地址所在 suburb 的名称快照。线下和快递订单都必填。
+- `state`：enum AustralianState。线下和快递订单都必填。
 - `zoneNameZh`：string?，下单时 suburb 所在配送大区的中文名快照。对快递订单可能为 `null`。
+
+地址快照在下单时生成，之后修改大区、成员或 suburb 字典，都不改变已有订单的快照。
 
 RefundBrief：`{ id, refundNo, status }`。
 
@@ -594,7 +615,6 @@ CommentBrief：`{ id, content, deleted }`。
 | 真实退款渠道与适配 | 独立 `providerRefundStatus` 已确认；供应商选择、权威状态映射及失败重试在真实接入阶段确定 |
 | 类目能否改名 | PRD 只写了新增和删除 |
 | 城市能否删除 | PRD 只写了新增和修改 |
-| 配送大区的细节 | 大区名称在城市内不能重复、`cityId` 创建后不能修改、概览按最终可送 suburb 判断大区是否可送，均为建议 |
 | suburb 字典的数据来源 | 使用哪一份官方数据初始化、以后如何更新 |
 | 各字段的长度上限 | PRD 只规定了部分字段，其余为建议值 |
 | 金额字段以 `Cents` 结尾 | 见 `docs/api/conventions.md` |
