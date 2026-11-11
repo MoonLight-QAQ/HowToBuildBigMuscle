@@ -264,6 +264,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 城市列表
+         * @description 城市名单由商城和闲置共用。数量很少，不分页，按 sort 从小到大排序，sort 相同时按创建时间排序。
+         *     城市不能删除，所以总是返回全部城市。
+         */
+        get: operations["listCities"];
+        put?: never;
+        /**
+         * 新增城市
+         * @description - 中文名和英文名都必填，都不能与已有城市重复，否则返回 NAME_DUPLICATED。
+         *       只在未删除的城市中比较（城市目前不能删除，见字段清单）。
+         *     - fulfillment 不传时默认为 post（快递）。
+         *     - state 必填，**创建后不能修改**：它决定哪些 suburb 能加入这个城市的配送大区。
+         *     - timezone 必填，取 IANA 时区名。前端按州预填，由店员确认；服务器不按州推算时区，
+         *       因为州不能唯一确定时区（见 ADR 0005）。不是有效的 IANA 时区名时返回 VALIDATION_FAILED。
+         *     - 新城市没有配送大区，地址都会越界。线下和快递城市都需要再建配送大区、加入 suburb。
+         */
+        post: operations["createCity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改城市
+         * @description 修改城市的名称、配送方式、时区和排序。请求中带全部可编辑字段。
+         *     - 请求体**不包含 state**，州创建后不能修改：修改州会让已有的配送大区成员与城市的州不一致。
+         *       请求中出现 state 时返回 VALIDATION_FAILED。确实建错了州，只能新增一个城市。
+         *     - 名称不能与其他城市重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - 修改配送方式不影响已有的订单和闲置帖子，只影响之后的新订单：
+         *       改成线下后，按配送大区和成员的可送设置计算；改成快递后，只要求地址属于本市的大区，按快递邮费和包邮门槛计算。
+         *     - 城市不提供乐观锁（字段清单中城市没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateCity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1099,6 +1159,75 @@ export interface components {
             /** @enum {string} */
             expectedListingStatus: "sold" | "self_removed" | "admin_removed";
         };
+        /**
+         * @description 城市。商城和闲置共用。城市不能删除
+         * @example {
+         *       "id": "1854239876543209472",
+         *       "nameZh": "悉尼",
+         *       "nameEn": "Sydney",
+         *       "fulfillment": "local",
+         *       "state": "NSW",
+         *       "timezone": "Australia/Sydney",
+         *       "sort": 1
+         *     }
+         */
+        City: {
+            readonly id: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description 所属州。创建后不能修改，用来校验哪些 suburb 能加入这个城市的配送大区 */
+            state: components["schemas"]["AustralianState"];
+            /** @description IANA 时区名，如 Australia/Sydney。前端按它格式化这个城市的时间 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 新增城市的请求体
+         * @example {
+         *       "nameZh": "布里斯班",
+         *       "nameEn": "Brisbane",
+         *       "fulfillment": "post",
+         *       "state": "QLD",
+         *       "timezone": "Australia/Brisbane",
+         *       "sort": 3
+         *     }
+         */
+        CityCreateInput: {
+            nameZh: string;
+            nameEn: string;
+            /**
+             * @description 不传时默认为 post（快递）
+             * @default post
+             */
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description 所属州。必填，创建后不能修改 */
+            state: components["schemas"]["AustralianState"];
+            /** @description IANA 时区名。前端按州预填（NSW、ACT 为 Australia/Sydney，VIC 为 Australia/Melbourne 等），由店员确认 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 修改城市的请求体。不包含 state，州创建后不能修改
+         * @example {
+         *       "nameZh": "悉尼",
+         *       "nameEn": "Sydney",
+         *       "fulfillment": "post",
+         *       "timezone": "Australia/Sydney",
+         *       "sort": 1
+         *     }
+         */
+        CityUpdateInput: {
+            nameZh: string;
+            nameEn: string;
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description IANA 时区名 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
         /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
         Admin: {
             id: components["schemas"]["Id"];
@@ -1864,6 +1993,107 @@ export interface operations {
             /** @description INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。 */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。 */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listCities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["City"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的城市 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["City"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有城市重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的城市 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["City"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（城市不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与其他城市重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
     };

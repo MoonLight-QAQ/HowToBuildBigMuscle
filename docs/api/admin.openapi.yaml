@@ -1176,6 +1176,198 @@ paths:
 
   # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
 
+  # ---------- 城市 ----------
+
+  /cities:
+    get:
+      tags: [city]
+      operationId: listCities
+      summary: 城市列表
+      description: |
+        城市名单由商城和闲置共用。数量很少，不分页，按 sort 从小到大排序，sort 相同时按创建时间排序。
+        城市不能删除，所以总是返回全部城市。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 一个线下城市和一个快递城市
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209472'
+                          nameZh: 悉尼
+                          nameEn: Sydney
+                          fulfillment: local
+                          state: NSW
+                          timezone: Australia/Sydney
+                          sort: 1
+                        - id: '1854239876543209473'
+                          nameZh: 堪培拉
+                          nameEn: Canberra
+                          fulfillment: post
+                          state: ACT
+                          timezone: Australia/Sydney
+                          sort: 2
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [city]
+      operationId: createCity
+      summary: 新增城市
+      description: |
+        - 中文名和英文名都必填，都不能与已有城市重复，否则返回 NAME_DUPLICATED。
+          只在未删除的城市中比较（城市目前不能删除，见字段清单）。
+        - fulfillment 不传时默认为 post（快递）。
+        - state 必填，**创建后不能修改**：它决定哪些 suburb 能加入这个城市的配送大区。
+        - timezone 必填，取 IANA 时区名。前端按州预填，由店员确认；服务器不按州推算时区，
+          因为州不能唯一确定时区（见 ADR 0005）。不是有效的 IANA 时区名时返回 VALIDATION_FAILED。
+        - 新城市没有配送大区，地址都会越界。线下和快递城市都需要再建配送大区、加入 suburb。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityCreateInput'
+            examples:
+              current:
+                summary: 新增一个快递城市
+                value:
+                  nameZh: 布里斯班
+                  nameEn: Brisbane
+                  fulfillment: post
+                  state: QLD
+                  timezone: Australia/Brisbane
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的城市
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 新建的城市
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209474'
+                      nameZh: 布里斯班
+                      nameEn: Brisbane
+                      fulfillment: post
+                      state: QLD
+                      timezone: Australia/Brisbane
+                      sort: 3
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有城市重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /cities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [city]
+      operationId: updateCity
+      summary: 修改城市
+      description: |
+        修改城市的名称、配送方式、时区和排序。请求中带全部可编辑字段。
+        - 请求体**不包含 state**，州创建后不能修改：修改州会让已有的配送大区成员与城市的州不一致。
+          请求中出现 state 时返回 VALIDATION_FAILED。确实建错了州，只能新增一个城市。
+        - 名称不能与其他城市重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - 修改配送方式不影响已有的订单和闲置帖子，只影响之后的新订单：
+          改成线下后，按配送大区和成员的可送设置计算；改成快递后，只要求地址属于本市的大区，按快递邮费和包邮门槛计算。
+        - 城市不提供乐观锁（字段清单中城市没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityUpdateInput'
+            examples:
+              current:
+                summary: 把悉尼改成快递
+                value:
+                  nameZh: 悉尼
+                  nameEn: Sydney
+                  fulfillment: post
+                  timezone: Australia/Sydney
+                  sort: 1
+      responses:
+        '200':
+          description: 成功，返回修改后的城市
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 修改后的城市
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209472'
+                      nameZh: 悉尼
+                      nameEn: Sydney
+                      fulfillment: post
+                      state: NSW
+                      timezone: Australia/Sydney
+                      sort: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（城市不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与其他城市重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
   # ===== B 区块结束 =====
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -2719,6 +2911,110 @@ components:
     # ===== A 区块结束 =====
 
     # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
+
+    # ---------- 城市 ----------
+
+    City:
+      type: object
+      description: 城市。商城和闲置共用。城市不能删除
+      additionalProperties: false
+      required: [id, nameZh, nameEn, fulfillment, state, timezone, sort]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          description: 所属州。创建后不能修改，用来校验哪些 suburb 能加入这个城市的配送大区
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名，如 Australia/Sydney。前端按它格式化这个城市的时间
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - id: '1854239876543209472'
+          nameZh: 悉尼
+          nameEn: Sydney
+          fulfillment: local
+          state: NSW
+          timezone: Australia/Sydney
+          sort: 1
+    CityCreateInput:
+      type: object
+      description: 新增城市的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, state, timezone, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+          default: post
+          description: 不传时默认为 post（快递）
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          description: 所属州。必填，创建后不能修改
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名。前端按州预填（NSW、ACT 为 Australia/Sydney，VIC 为 Australia/Melbourne 等），由店员确认
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 布里斯班
+          nameEn: Brisbane
+          fulfillment: post
+          state: QLD
+          timezone: Australia/Brisbane
+          sort: 3
+    CityUpdateInput:
+      type: object
+      description: 修改城市的请求体。不包含 state，州创建后不能修改
+      additionalProperties: false
+      required: [nameZh, nameEn, fulfillment, timezone, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 悉尼
+          nameEn: Sydney
+          fulfillment: post
+          timezone: Australia/Sydney
+          sort: 1
 
     # ===== B 区块结束 =====
 
