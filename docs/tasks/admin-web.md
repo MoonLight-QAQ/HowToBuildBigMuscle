@@ -52,6 +52,7 @@ flowchart LR
 | W-00b | A 的模块接口：概览、订单、退款、举报 | 契约中 A 的区块 | @RealninX | W-00a |
 | W-00c | B 的模块接口：城市、商城类目、商品、配送、图片上传 | 契约中 B 的区块 | @MoonLight-QAQ | W-00a |
 | W-00d | C 的模块接口：登录、闲置类目、闲置 | 契约中 C 的区块 | @celine-hy | W-00a |
+| W-00e | A 区配送大区与 suburb 契约迁移（[#62](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/62)） | 契约 A 区、必要生成类型及本行；迁移边界见 Issue #62 和 PR #63 | @RealninX | W-00b、W-01b、PR #61 / ADR 0005 |
 
 ## 二、工程骨架与共享区域
 
