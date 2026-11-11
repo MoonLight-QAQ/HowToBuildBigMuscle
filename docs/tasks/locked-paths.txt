@@ -29,14 +29,21 @@ frontend/web/.node-version
 frontend/web/index.html
 
 # W-01b 请求与模拟（#21）
-# 错误码文件的修改须按解锁流程审查；api/generated/ 不锁定，原因见文件开头。
+# api/generated/ 不锁定，原因见文件开头。
+# constants/error-code.ts 不锁定：各业务模块随契约追加错误码，与业务 PR 一起审查，
+# 由 CODEOWNERS 和 CI 类型检查把关（#64）。
 # constants/ 保持开放，业务模块可新增自己的状态文案和标签颜色文件。
 # mocks/handlers/index.ts 保持开放，模块在兜底 handler 前追加自己的注册。
 # main.ts 保持开放，供 W-01c 接入路由；不锁配置文件和 README。
 frontend/web/src/api/http.ts
 frontend/web/src/mocks/browser.ts
-frontend/web/src/constants/error-code.ts
 frontend/web/src/types/
+
+# W-01c 路由、布局与登录状态（#22）
+# router/index.ts 保持开放，各业务模块在其中添加属于自己的路由。
+frontend/web/src/router/guard.ts
+frontend/web/src/layouts/
+frontend/web/src/stores/
 
 # W-01e CI 流水线（#24）
 # .github/workflows/ 不锁定：Dependabot 每周升级 Action 版本时要修改 ci.yml，

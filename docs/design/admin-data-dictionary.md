@@ -29,7 +29,7 @@
 | `Image` | 图片对象。返回时为 `{ key, url, width, height }`；提交时为 `{ key, width, height }`，见 `docs/api/conventions.md` |
 | `?` | 后缀 `?` 表示可以为 `null` |
 
-「来源」一列：**录入**表示由店员在后台填写；**计算**表示由服务器计算，前端只展示，不提交；**快照**表示下单时抄下来、之后不再变化；**小程序**表示由用户在小程序中产生，后台只读。
+「来源」一列：**录入**表示由店员在后台填写；**计算**表示由服务器计算，前端只展示，不提交；**快照**表示下单时抄下来、之后不再变化；**小程序**表示由用户在小程序中产生，后台只读；**导入**表示从官方数据导入，后台只读。
 
 ---
 
@@ -55,6 +55,23 @@
 | --- | --- |
 | `local` | 线下配送 |
 | `post` | 快递 |
+
+### AustralianState 州
+
+澳洲的 6 个州和 2 个领地，取值为澳洲邮政的标准缩写。
+
+| 值 | 名称 |
+| --- | --- |
+| `NSW` | 新南威尔士州 |
+| `VIC` | 维多利亚州 |
+| `QLD` | 昆士兰州 |
+| `WA` | 西澳大利亚州 |
+| `SA` | 南澳大利亚州 |
+| `TAS` | 塔斯马尼亚州 |
+| `ACT` | 澳大利亚首都领地 |
+| `NT` | 北领地 |
+
+取值使用**大写**，是枚举「小写加下划线」规则的例外，见 `docs/api/conventions.md`。
 
 ### CompletedBy 完成人
 
@@ -173,11 +190,13 @@
 | `openRefundCount` | int | 计算 | **待审退款单**数（不是退款中的订单数） |
 | `openReportCount` | int | 计算 | 待处理举报数 |
 | `cities` | CityOverview[] | 计算 | 每个城市的配送概况，见下表 |
-| `localFeeCents` | cents | 计算 | 当前线下配送费 |
+| `localFeeCents` | cents | 计算 | 当前全店统一线下配送费（配送大区可单独设置，见第三部分） |
 | `postFeeCents` | cents | 计算 | 当前快递邮费 |
 | `freeShippingThresholdCents` | cents | 计算 | 当前包邮门槛 |
 
-CityOverview：`{ id, nameZh, fulfillment, deliverableDistrictNamesZh: string[] }`。
+CityOverview：`{ id, nameZh, fulfillment, deliverableZoneNamesZh: string[] }`。
+
+`deliverableZoneNamesZh`：这个城市中**至少有一个最终可送 suburb** 的配送大区的中文名，按大区的 `sort` 排序。不只看大区的 `deliverable`：大区默认不可送、但其中有 suburb 被单独设为可送时，这个大区算可送；大区默认可送、但其中的 suburb 全部被单独设为不可送时，这个大区不算可送。快递城市为 `[]`。
 
 ---
 
@@ -191,26 +210,104 @@ CityOverview：`{ id, nameZh, fulfillment, deliverableDistrictNamesZh: string[] 
 | `nameZh` | string(20) | 录入 | 必填，不能与已有城市重复 |
 | `nameEn` | string(40) | 录入 | 必填，不能与已有城市重复 |
 | `fulfillment` | enum Fulfillment | 录入 | 新增时默认 `post` |
-| `timezone` | string | 录入 | IANA 时区名，默认 `Australia/Sydney`【建议】 |
+| `state` | enum AustralianState | 录入 | 所属州。新增时必填，**创建后不能修改** |
+| `timezone` | string | 录入 | IANA 时区名，必填。新增时按州预填，由店员确认 |
 | `sort` | int | 录入 | 排序，越小越靠前 |
 
 - 城市不能删除。【建议】PRD 只写了新增和修改。
 - 修改配送方式，不影响已有的订单和闲置帖子。
+- 修改城市的接口（`updateCity`）请求体中**不包含** `state`。州决定了哪些 suburb 能加入这个城市的配送大区，修改州会让已有的大区成员失效。
+- 州和时区**分开保存**，因为州不能唯一确定时区：新南威尔士州的 Broken Hill 使用阿德莱德时间（`Australia/Broken_Hill`），昆士兰州不实行夏令时。原因见 `docs/adr/0005-delivery-zone-and-suburb.md`。
 
-### District 区
+新增城市时，前端按下表预填时区，店员可以修改：
+
+| 州 | 预填时区 |
+| --- | --- |
+| `NSW`、`ACT` | `Australia/Sydney` |
+| `VIC` | `Australia/Melbourne` |
+| `QLD` | `Australia/Brisbane` |
+| `WA` | `Australia/Perth` |
+| `SA` | `Australia/Adelaide` |
+| `TAS` | `Australia/Hobart` |
+| `NT` | `Australia/Darwin` |
+
+### Suburb 字典
+
+澳洲官方的地理数据，从官方数据导入。后台**只读**，不新增、不修改、不删除。
+
+| 字段 | 类型 | 来源 | 说明 |
+| --- | --- | --- | --- |
+| `id` | id | 导入 | |
+| `name` | string(40) | 导入 | 如 `Leichhardt` |
+| `postcode` | string(4) | 导入 | 邮编，按字符串保存，保留开头的 0（如 `0800`） |
+| `state` | enum AustralianState | 导入 | |
+
+- `name + postcode + state` 唯一。同名的 suburb 可能出现在不同的州，同一个 suburb 也可能有多个邮编。
+- Suburb **不包含城市**。suburb 属于哪个城市，由它所在配送大区的城市决定。
+
+### DeliveryZone 配送大区
+
+店铺自定义的运营区域，属于某个城市，如悉尼的「内西区」。
 
 | 字段 | 类型 | 来源 | 说明 |
 | --- | --- | --- | --- |
 | `id` | id | | |
-| `cityId` | id | 录入 | |
-| `nameZh` | string(20) | 录入 | 必填 |
-| `nameEn` | string(40) | 录入 | 必填 |
-| `deliverable` | bool | 录入 | 是否可送。只对线下城市有意义 |
-| `suburbs` | Suburb[] | 录入 | 这个区包含哪些 suburb【建议】 |
+| `cityId` | id | 录入 | 所属城市。**创建后不能修改** |
+| `nameZh` | string(20) | 录入 | 必填。同一城市内不能重复 |
+| `nameEn` | string(40) | 录入 | 必填。同一城市内不能重复 |
+| `deliverable` | bool | 录入 | 大区内 suburb 的**默认**可送设置。只对线下订单生效 |
+| `localFeeCents` | cents? | 录入 | 这个大区的线下配送费，≥ 0。为 `null` 时使用全店统一配送费。只对线下订单生效 |
+| `sort` | int | 录入 | |
+| `suburbCount` | int | 计算 | 大区内的 suburb 数 |
 
-Suburb：`{ name: string(40), postcode: string(4) }`。
+- 大区**不能删除**。不再使用时，把其中的 suburb 移出。
+- 同一城市内名称重复时，返回 `NAME_DUPLICATED`。
+- 修改 `cityId` 会让大区成员与新城市的州不一致，所以创建后不能修改，修改接口的请求体中不包含 `cityId`。
+- 配送大区有两个作用：
+  - **圈定城市的服务范围**，对线下城市和快递城市都适用：城市的所有大区中的 suburb，就是这个城市的范围。
+  - **线下配送的可送和运费设置**，只对线下订单生效。快递城市的大区只用于圈定范围，`deliverable`、`localFeeCents` 和成员的 `deliverableOverride` 都不起作用。
+- 以后的阶梯运费规则挂在配送大区上，这一版不实现。
 
-**为什么需要 `suburbs`【建议】：** 地址由 Google 地图检索得到，地图返回的是具体的 suburb（如 Leichhardt），而不是「内西区」这样的片区名，直接按名称匹配对不上。需要记录每个区包含哪些 suburb 或邮编，下单时据此判断地址属于哪个区。**需要和产品确认。**
+### ZoneSuburb 大区成员
+
+suburb 与配送大区的关联。
+
+| 字段 | 类型 | 来源 | 说明 |
+| --- | --- | --- | --- |
+| `suburb` | Suburb | 导入 | 字典中的 suburb |
+| `deliverableOverride` | bool? | 录入 | 单独设置是否可送。为 `null` 时跟随大区 |
+| `deliverable` | bool | 计算 | 最终是否可送 |
+| `localFeeCents` | cents | 计算 | 实际的线下配送费 |
+
+移出大区只删除关联，不影响字典中的 suburb。
+
+### 配送规则
+
+**大区成员**
+
+1. 一个 suburb **最多属于一个**配送大区。加入第二个大区时，返回 `SUBURB_IN_OTHER_ZONE`，需要先从原来的大区移出。
+2. 加入大区的 suburb，`state` 必须与大区所属城市的 `state` 一致，否则返回 `SUBURB_STATE_MISMATCH`。
+
+**地址属于哪个城市**（线下和快递相同）
+
+3. 保存地址时，服务器用 `placeId` 向地图服务重新取一次详情，不信任前端提交的地址；再用取回的 suburb 名称、邮编和州，按 `name + postcode + state` 匹配字典中的 suburb。
+4. suburb 属于哪个城市，由它所在大区的城市决定。地址属于某个城市，当且仅当它的 suburb 属于这个城市的某个配送大区。**不能只凭州相同就认定属于本市。**
+5. 匹配不到字典中的 suburb，或 suburb 不属于当前城市的任何大区时，地址越界，不能保存，返回 `PLACE_OUTSIDE`。
+
+**线下订单**（以下规则只对线下订单生效）
+
+6. 未加入任何配送大区的 suburb 不可配送（由第 5 条，这样的地址也无法保存）。
+7. **最终可送** = `deliverableOverride` 不为 `null` 时取它，否则取大区的 `deliverable`。属于本市但不可送的地址，仍然可以保存，结算时返回 `ADDRESS_NOT_DELIVERABLE`。
+8. **实际运费** = 大区的 `localFeeCents` 不为 `null` 时取它，否则取全店统一配送费 `DeliveryConfig.localFeeCents`。
+9. 线下城市中没有任何最终可送的 suburb 时，下单返回 `NO_DELIVERY_AREA`。
+
+**快递订单**
+
+10. 地址属于本市（第 4 条）即可下单，**不检查**可送设置，也不使用大区的运费；邮费按 `DeliveryConfig` 的快递邮费和包邮门槛计算。
+
+**通用**
+
+11. 可送和运费以服务器为准。修改大区、成员或运费，只影响之后的新订单；已有订单的地址和运费使用下单时的快照，不按新的配置重新计算。
 
 ### DeliveryConfig 配送费用
 
@@ -218,7 +315,7 @@ Suburb：`{ name: string(40), postcode: string(4) }`。
 
 | 字段 | 类型 | 来源 | 说明 |
 | --- | --- | --- | --- |
-| `localFeeCents` | cents | 录入 | 线下配送费，默认 600。≥ 0 |
+| `localFeeCents` | cents | 录入 | 全店统一线下配送费，默认 600。≥ 0。配送大区的 `localFeeCents` 为 `null` 时使用 |
 | `postFeeCents` | cents | 录入 | 快递邮费，默认 800。≥ 0 |
 | `freeShippingThresholdCents` | cents | 录入 | 包邮门槛，默认 5000。≥ 0。只对快递订单生效 |
 | `version` | int | 计算 | 编辑时原样提交，用于防止同时修改 |
@@ -332,7 +429,13 @@ Suburb：`{ name: string(40), postcode: string(4) }`。
 
 UserBrief：`{ id, nickname }`。
 
-AddressSnapshot：`{ formatted, street, districtNameZh, postcode }`。`districtNameZh` 对快递订单可能为 `null`。
+AddressSnapshot：`{ formatted, street, suburb, postcode, state, zoneNameZh }`。
+
+- `suburb`：string，下单时地址所在 suburb 的名称快照。线下和快递订单都必填。
+- `state`：enum AustralianState。线下和快递订单都必填。
+- `zoneNameZh`：string?，下单时 suburb 所在配送大区的中文名快照。对快递订单可能为 `null`。
+
+地址快照在下单时生成，之后修改大区、成员或 suburb 字典，都不改变已有订单的快照。
 
 RefundBrief：`{ id, refundNo, status }`。
 
@@ -509,9 +612,9 @@ CommentBrief：`{ id, content, deleted }`。
 
 | 事项 | 说明 |
 | --- | --- |
-| 区的匹配方式 | 是否采用 `suburbs` 字段，按 suburb 或邮编判断地址属于哪个区 |
 | 真实退款渠道与适配 | 独立 `providerRefundStatus` 已确认；供应商选择、权威状态映射及失败重试在真实接入阶段确定 |
 | 类目能否改名 | PRD 只写了新增和删除 |
 | 城市能否删除 | PRD 只写了新增和修改 |
+| suburb 字典的数据来源 | 使用哪一份官方数据初始化、以后如何更新 |
 | 各字段的长度上限 | PRD 只规定了部分字段，其余为建议值 |
 | 金额字段以 `Cents` 结尾 | 见 `docs/api/conventions.md` |

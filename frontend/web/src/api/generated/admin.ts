@@ -491,7 +491,7 @@ export interface components {
          *     需要新的错误码时，先加到 conventions.md，再加到这里。
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
+        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "SUBURB_IN_OTHER_ZONE" | "SUBURB_STATE_MISMATCH" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
         /** @description 分页信息。分页列表的 data 由它和 items 组成，见文件开头的示例 */
         PageMeta: {
             /** @description 总条数 */
@@ -511,6 +511,19 @@ export interface components {
          * @enum {string}
          */
         Fulfillment: "local" | "post";
+        /**
+         * @description 澳洲州和领地的标准大写缩写。A、B 区块共用，供订单地址快照、城市及 suburb 字典引用。
+         *     - NSW：新南威尔士州
+         *     - VIC：维多利亚州
+         *     - QLD：昆士兰州
+         *     - WA：西澳大利亚州
+         *     - SA：南澳大利亚州
+         *     - TAS：塔斯马尼亚州
+         *     - ACT：澳大利亚首都领地
+         *     - NT：北领地
+         * @enum {string}
+         */
+        AustralianState: "NSW" | "VIC" | "QLD" | "WA" | "SA" | "TAS" | "ACT" | "NT";
         /**
          * @description 订单状态。后台仅允许 pending→delivering、pending/delivering→done；其余状态只读。
          * @enum {string}
@@ -552,12 +565,18 @@ export interface components {
             refundNo: string;
             status: components["schemas"]["RefundStatus"];
         };
+        /** @description 下单时保存的地址快照；后续大区、成员或 suburb 字典变化不改写本对象。新字段不得根据当前配置反推历史值。 */
         AddressSnapshot: {
             formatted: string;
             street: string;
-            districtNameZh: string | null;
+            /** @description 下单时配送大区中文名的快照；快递订单允许为 null，不按当前大区名称回算。 */
+            zoneNameZh: string | null;
+            /** @description 下单时 suburb 名称的快照，线下和快递订单均必返。 */
+            suburb: string;
             /** @description 四位邮编，按字符串保留。 */
             postcode: string;
+            /** @description 下单时所属州的快照，线下和快递订单均必返。 */
+            state: components["schemas"]["AustralianState"];
         };
         /** @description 订单列表投影。ID、金额、地址、商品名称和价格按订单快照，不用现价或新配送配置重算。 */
         OrderListItem: {
@@ -602,8 +621,10 @@ export interface components {
          *       "address": {
          *         "formatted": "演示地址，请勿配送",
          *         "street": "示例街道",
-         *         "districtNameZh": "演示区域",
-         *         "postcode": "2000"
+         *         "zoneNameZh": "演示区域",
+         *         "suburb": "Example Suburb",
+         *         "postcode": "2000",
+         *         "state": "NSW"
          *       },
          *       "deliveryDate": "2026-11-02",
          *       "slotNameZh": "演示时段",
@@ -995,7 +1016,8 @@ export interface components {
             id: components["schemas"]["Id"];
             nameZh: string;
             fulfillment: components["schemas"]["Fulfillment"];
-            deliverableDistrictNamesZh: string[];
+            /** @description 线下城市中至少有一个最终可送 suburb 的配送大区中文名，按大区 sort 排序。默认不可送但有成员覆盖为可送时纳入；默认可送但成员全部不可送时不纳入。快递城市为 []，不据此推断快递服务范围为空。 */
+            deliverableZoneNamesZh: string[];
         };
         /** @description 服务端实时计算四项待办计数；配送配置和城市只读展示，不包含商城配置写接口。 */
         Summary: {
@@ -1006,6 +1028,7 @@ export interface components {
             /** @description 仅统计 status=open 的举报。 */
             openReportCount: number;
             cities: components["schemas"]["CityOverview"][];
+            /** @description 全店默认线下配送费；配送大区可覆盖。此值不是每张订单的最终运费，也不用于快递邮费；已有订单继续读取 shippingFeeCents 快照。 */
             localFeeCents: components["schemas"]["Cents"];
             postFeeCents: components["schemas"]["Cents"];
             freeShippingThresholdCents: components["schemas"]["Cents"];

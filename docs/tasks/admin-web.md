@@ -52,6 +52,7 @@ flowchart LR
 | W-00b | A 的模块接口：概览、订单、退款、举报 | 契约中 A 的区块 | @RealninX | W-00a |
 | W-00c | B 的模块接口：城市、商城类目、商品、配送、图片上传 | 契约中 B 的区块 | @MoonLight-QAQ | W-00a |
 | W-00d | C 的模块接口：登录、闲置类目、闲置 | 契约中 C 的区块 | @celine-hy | W-00a |
+| W-00e | A 区配送大区与 suburb 契约迁移（[#62](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/62)） | 契约 A 区、必要生成类型及本行；迁移边界见 Issue #62 和 PR #63 | @RealninX | W-00b、W-01b、PR #61 / ADR 0005 |
 
 ## 二、工程骨架与共享区域
 
@@ -76,7 +77,7 @@ flowchart LR
 | W-03 | 登录 | `src/views/login/`、`src/api/auth.ts`、`src/mocks/handlers/auth.ts`、`src/mocks/data/auth.ts` | @celine-hy | W-01b、W-01c、W-01d |
 | W-04 | 商城类目 | `src/views/mall-category/`、`src/api/mall-category.ts`、`src/mocks/handlers/mall-category.ts`、`src/mocks/data/mall-category.ts` | @MoonLight-QAQ | W-02 |
 | W-05 | 商品（列表、新增、编辑、入库） | `src/views/product/`、`src/api/product.ts`、`src/mocks/handlers/product.ts`、`src/mocks/data/product.ts` | @MoonLight-QAQ | W-04 |
-| W-06 | 配送（费用、时段、区与 suburb） | `src/views/delivery/`、`src/api/delivery.ts`、`src/mocks/handlers/delivery.ts`、`src/mocks/data/delivery.ts` | @MoonLight-QAQ | W-02 |
+| W-06 | 配送（费用、时段、配送大区、suburb） | `src/views/delivery/`、`src/api/delivery.ts`、`src/mocks/handlers/delivery.ts`、`src/mocks/data/delivery.ts` | @MoonLight-QAQ | W-02 |
 | W-07 | 闲置类目 | `src/views/flea-category/`、`src/api/flea-category.ts`、`src/mocks/handlers/flea-category.ts`、`src/mocks/data/flea-category.ts` | @celine-hy | W-02 |
 | W-08 | 闲置（封面墙、详情、已浏览、强制下架） | `src/views/listing/`、`src/api/listing.ts`、`src/mocks/handlers/listing.ts`、`src/mocks/data/listing.ts` | @celine-hy | W-07 |
 | W-09 | 举报（列表、忽略、下架） | `src/views/report/`、`src/api/report.ts`、`src/mocks/handlers/report.ts`、`src/mocks/data/report.ts` | @RealninX | W-08 |
