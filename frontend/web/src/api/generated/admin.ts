@@ -585,6 +585,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mall-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 商城类目列表
+         * @description 只给商城用，和闲置类目是两个独立的对象和接口。数量很少，不分页，按 sort 从小到大排序。
+         *     不返回已删除的类目。
+         *     inUseCount 是这个类目下**已上架**的商品数（包括缺货的商品），大于 0 时前端禁用删除按钮。
+         */
+        get: operations["listMallCategories"];
+        put?: never;
+        /**
+         * 新增商城类目
+         * @description - 中文名和英文名都必填，都不能与未删除的商城类目重复，否则返回 NAME_DUPLICATED。
+         *       只和商城类目比较，不和闲置类目比较；已删除类目的名称可以再次使用。
+         *     - 类目只能新增和删除，**不能修改**，所以不提供修改接口。
+         *     - 新类目的 inUseCount 为 0。
+         */
+        post: operations["createMallCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mall-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 删除商城类目
+         * @description 软删除。只删除商城类目，不影响闲置类目。
+         *     - 这个类目下还有**已上架**的商品（包括缺货的商品，即 inUseCount 大于 0）时，返回 CATEGORY_IN_USE。
+         *       服务器在删除时重新统计，不以前端看到的 inUseCount 为准。
+         *     - 只有已下架商品的类目可以删除。删除后，这些商品的 categoryNameZh 照常返回原类目名；
+         *       再次编辑这些商品时，需要改选一个未删除的类目，否则返回 VALIDATION_FAILED。
+         *     - 删除后，类目不再出现在列表中，名称可以再次使用。
+         */
+        delete: operations["deleteMallCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1726,6 +1783,41 @@ export interface components {
             /** @description 必须晚于 startTime */
             endTime: components["schemas"]["ClockTime"];
             enabled: boolean;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 商城类目。与闲置类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改
+         * @example {
+         *       "id": "1854239876543209540",
+         *       "nameZh": "日用百货",
+         *       "nameEn": "Household",
+         *       "sort": 1,
+         *       "inUseCount": 12
+         *     }
+         */
+        MallCategory: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 不能与其他商城类目重复 */
+            nameZh: string;
+            /** @description 不能与其他商城类目重复 */
+            nameEn: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+            /** @description 这个类目下已上架的商品数（包括缺货的）。大于 0 时不能删除，前端据此禁用删除按钮 */
+            readonly inUseCount: number;
+        };
+        /**
+         * @description 新增商城类目的请求体
+         * @example {
+         *       "nameZh": "节日礼品",
+         *       "nameEn": "Festive Gifts",
+         *       "sort": 2
+         *     }
+         */
+        MallCategoryInput: {
+            nameZh: string;
+            nameEn: string;
             /** @description 排序，越小越靠前 */
             sort: number;
         };
@@ -3044,6 +3136,91 @@ export interface operations {
             /** @description NOT_FOUND（时段不存在） */
             404: components["responses"]["NotFound"];
             /** @description LAST_SLOT（这是最后一个时段，至少要保留一个） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMallCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["MallCategory"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createMallCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MallCategoryInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的类目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["MallCategory"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有商城类目重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteMallCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（类目不存在或已删除） */
+            404: components["responses"]["NotFound"];
+            /** @description CATEGORY_IN_USE（类目下还有已上架的商品） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];

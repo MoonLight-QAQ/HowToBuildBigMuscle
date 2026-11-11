@@ -2178,6 +2178,146 @@ paths:
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
 
+  # ---------- 商城类目 ----------
+
+  /mall-categories:
+    get:
+      tags: [mall-category]
+      operationId: listMallCategories
+      summary: 商城类目列表
+      description: |
+        只给商城用，和闲置类目是两个独立的对象和接口。数量很少，不分页，按 sort 从小到大排序。
+        不返回已删除的类目。
+        inUseCount 是这个类目下**已上架**的商品数（包括缺货的商品），大于 0 时前端禁用删除按钮。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/MallCategory'
+              examples:
+                current:
+                  summary: 两个类目，一个有在售商品
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209540'
+                          nameZh: 日用百货
+                          nameEn: Household
+                          sort: 1
+                          inUseCount: 12
+                        - id: '1854239876543209541'
+                          nameZh: 节日礼品
+                          nameEn: Festive Gifts
+                          sort: 2
+                          inUseCount: 0
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [mall-category]
+      operationId: createMallCategory
+      summary: 新增商城类目
+      description: |
+        - 中文名和英文名都必填，都不能与未删除的商城类目重复，否则返回 NAME_DUPLICATED。
+          只和商城类目比较，不和闲置类目比较；已删除类目的名称可以再次使用。
+        - 类目只能新增和删除，**不能修改**，所以不提供修改接口。
+        - 新类目的 inUseCount 为 0。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MallCategoryInput'
+            examples:
+              current:
+                summary: 新增一个类目
+                value:
+                  nameZh: 节日礼品
+                  nameEn: Festive Gifts
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回新建的类目
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MallCategory'
+              examples:
+                current:
+                  summary: 新建的类目
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209541'
+                      nameZh: 节日礼品
+                      nameEn: Festive Gifts
+                      sort: 2
+                      inUseCount: 0
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有商城类目重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /mall-categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    delete:
+      tags: [mall-category]
+      operationId: deleteMallCategory
+      summary: 删除商城类目
+      description: |
+        软删除。只删除商城类目，不影响闲置类目。
+        - 这个类目下还有**已上架**的商品（包括缺货的商品，即 inUseCount 大于 0）时，返回 CATEGORY_IN_USE。
+          服务器在删除时重新统计，不以前端看到的 inUseCount 为准。
+        - 只有已下架商品的类目可以删除。删除后，这些商品的 categoryNameZh 照常返回原类目名；
+          再次编辑这些商品时，需要改选一个未删除的类目，否则返回 VALIDATION_FAILED。
+        - 删除后，类目不再出现在列表中，名称可以再次使用。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（类目不存在或已删除）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: CATEGORY_IN_USE（类目下还有已上架的商品）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
   # ===== B 区块结束 =====
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -4165,6 +4305,63 @@ components:
           endTime: '20:00'
           enabled: true
           sort: 3
+
+    # ---------- 商城类目 ----------
+
+    MallCategory:
+      type: object
+      description: 商城类目。与闲置类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改
+      additionalProperties: false
+      required: [id, nameZh, nameEn, sort, inUseCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 不能与其他商城类目重复
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 不能与其他商城类目重复
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+        inUseCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 这个类目下已上架的商品数（包括缺货的）。大于 0 时不能删除，前端据此禁用删除按钮
+      examples:
+        - id: '1854239876543209540'
+          nameZh: 日用百货
+          nameEn: Household
+          sort: 1
+          inUseCount: 12
+    MallCategoryInput:
+      type: object
+      description: 新增商城类目的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 节日礼品
+          nameEn: Festive Gifts
+          sort: 2
 
     # ===== B 区块结束 =====
 
