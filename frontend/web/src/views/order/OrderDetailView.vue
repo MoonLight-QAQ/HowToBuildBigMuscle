@@ -112,9 +112,12 @@ function openRefund(id: string): void {
             order.address.formatted
           }}</ElDescriptionsItem>
           <ElDescriptionsItem label="街道">{{ order.address.street }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="区 / 邮编"
-            >{{ order.address.districtNameZh ?? '—' }} /
-            {{ order.address.postcode }}</ElDescriptionsItem
+          <ElDescriptionsItem label="配送大区">{{
+            order.address.zoneNameZh ?? '—'
+          }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="街区">{{ order.address.suburb }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="州 / 邮编"
+            >{{ order.address.state }} / {{ order.address.postcode }}</ElDescriptionsItem
           >
           <ElDescriptionsItem label="城市快照">{{ order.cityNameZh }}</ElDescriptionsItem>
           <ElDescriptionsItem label="显示时区">{{ order.timezone }}</ElDescriptionsItem>

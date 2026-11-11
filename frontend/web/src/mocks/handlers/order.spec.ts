@@ -102,6 +102,16 @@ it('覆盖七种状态、两种履约及三种完成来源，保留金额快照�
     expect(order.id).toMatch(/^[0-9]{1,20}$/)
     expect(order.contactPhone).toBe('0491 570 006')
     expect(order.address.formatted).toContain('虚构')
+    expect(order.address).toMatchObject(
+      order.fulfillment === 'local'
+        ? {
+            zoneNameZh: '演示大区',
+            suburb: 'Example Sydney Suburb',
+            postcode: '2000',
+            state: 'NSW',
+          }
+        : { zoneNameZh: null, suburb: 'Example Perth Suburb', postcode: '6000', state: 'WA' },
+    )
     expect(order.actualAmountCents).toBe(order.goodsAmountCents + order.shippingFeeCents)
     expect(order.user).toEqual({ id: '9000000000000000001', nickname: expect.any(String) })
     expect(order.timezone).toMatch(/^Australia\//)
@@ -288,6 +298,8 @@ it.each(['pending', 'delivering'] as const)(
     expect(Date.parse(updated.completedAt ?? '')).toBeGreaterThanOrEqual(before)
     expect(Date.parse(updated.completedAt ?? '')).toBeLessThanOrEqual(Date.now())
     expect(updated.actualAmountCents).toBe(order.actualAmountCents)
+    expect(updated.shippingFeeCents).toBe(order.shippingFeeCents)
+    expect(updated.address).toEqual(order.address)
     expect(updated.items).toEqual(order.items)
     expect(updated.refunds).toEqual(order.refunds)
     await assertError(

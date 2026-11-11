@@ -46,8 +46,10 @@ function fixture(): Order {
     address: {
       formatted: '演示地址，请勿配送',
       street: '示例街道',
-      districtNameZh: '演示区域',
+      zoneNameZh: '演示大区',
+      suburb: 'Example Suburb',
       postcode: '0200',
+      state: 'NSW',
     },
     deliveryDate: '2026-11-02',
     slotNameZh: '演示时段',
@@ -126,23 +128,28 @@ afterAll(stopServer)
 /** 中文：验证快照字段、ID、整数分及虚构完整电话保持原值并产生副本。 English: Verifies snapshot values, string IDs, cents and fictional full phone survive in a copied object. */
 it('解析详情快照，保留大数 ID、金额和前导零邮编', function testValidOrder() {
   const original = fixture()
+  original.address.zoneNameZh = '😀'.repeat(20)
+  original.address.suburb = '😀'.repeat(40)
   const parsed = parseOrder(original)
   expect(parsed).toEqual(original)
   expect(parsed).not.toBe(original)
+  expect(parsed.address).not.toBe(original.address)
   expect(parsed.items).not.toBe(original.items)
   expect(parsed.address.postcode).toBe('0200')
 })
 
 /** 中文：验证快递空时段、可空字段、空商品数组及 Unicode 字符长度遵循契约。 English: Verifies postal null slots, nullable fields, empty items and Unicode lengths follow the contract. */
 it('接受契约允许的空值和字符串 ID，不额外限制数组或中文长度', function testContractBoundaries() {
+  const base = fixture()
   const order: Order = {
-    ...fixture(),
+    ...base,
     id: '0',
     fulfillment: 'post',
     slotStartAt: null,
     slotEndAt: null,
     deliveryDate: null,
     slotNameZh: null,
+    address: { ...base.address, zoneNameZh: null, suburb: '' },
     items: [],
     contactName: '😀'.repeat(60),
     remark: '',
@@ -221,6 +228,12 @@ const invalidOrderPatches: Array<[string, Record<string, unknown>]> = [
   ['快递带当地日期', { fulfillment: 'post', slotStartAt: null, slotEndAt: null }],
   ['空联系电话', { contactPhone: '' }],
   ['超长收货人名', { contactName: '字'.repeat(61) }],
+  ['超长配送大区名', { address: { ...fixture().address, zoneNameZh: '😀'.repeat(21) } }],
+  ['超长街区名', { address: { ...fixture().address, suburb: '😀'.repeat(41) } }],
+  ['街区为 null', { address: { ...fixture().address, suburb: null } }],
+  ['州代码为 null', { address: { ...fixture().address, state: null } }],
+  ['未知州代码', { address: { ...fixture().address, state: 'nsw' } }],
+  ['旧配送区字段', { address: { ...fixture().address, districtNameZh: '旧区' } }],
   ['数字邮编', { address: { ...fixture().address, postcode: 2000 } }],
   ['未知完成者', { completedAt: '2026-11-02T09:00:00Z', completedBy: 'system' }],
   ['未知退款审核状态', { refunds: [{ ...fixture().refunds[0], status: 'succeeded' }] }],
@@ -241,6 +254,23 @@ it.each(invalidOrderPatches)('拒绝详情：%s', function testInvalidOrder(_lab
   }
   expect(parseInvalidFixture).toThrow()
 })
+
+/** 中文：拒绝缺少新版地址字段的快照，包含可空但必返的大区名。 English: Reject snapshots missing a new address field, including the required nullable zone name. */
+it.each(['zoneNameZh', 'suburb', 'state'] as const)(
+  '拒绝地址缺少 %s',
+  function testMissingAddressField(field) {
+    const order = fixture()
+    const address: Partial<Order['address']> = { ...order.address }
+    delete address[field]
+
+    /** 中文：解析缺少地址字段的详情，预期抛错。 English: Parse a detail with a missing address field, expecting an error. */
+    function parseIncompleteOrder(): Order {
+      return parseOrder({ ...order, address })
+    }
+
+    expect(parseIncompleteOrder).toThrow()
+  },
+)
 
 /** 中文：验证真正缺失字段与非对象均被拒绝，失败预期抛错。 English: Verifies missing required fields and nonobjects are rejected with expected errors. */
 it('拒绝缺失字段、null 和数组详情', function testMissingFields() {

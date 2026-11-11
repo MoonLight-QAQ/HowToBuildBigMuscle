@@ -139,6 +139,17 @@ const parseStatus = enumeration<OrderStatus>([
   'cancelled',
 ])
 
+const parseAustralianState = enumeration<components['schemas']['AustralianState']>([
+  'NSW',
+  'VIC',
+  'QLD',
+  'WA',
+  'SA',
+  'TAS',
+  'ACT',
+  'NT',
+])
+
 /** 中文：解析用户公开简表，拒绝手机号等额外字段，失败抛错，无副作用。 English: Parses the public user projection, rejecting extra fields such as phone; failures throw, no effects. */
 function parseUser(value: unknown): components['schemas']['UserBrief'] {
   return parseFields(value, { id: parseId, nickname: text() })
@@ -168,13 +179,15 @@ function parseRefund(value: unknown): components['schemas']['RefundBrief'] {
   })
 }
 
-/** 中文：解析收货地址快照，失败抛错，无副作用。 English: Parses a recipient address snapshot; failures throw, no effects. */
+/** 中文：按契约保留收货地址快照的原值，失败抛错，无副作用。 English: Parses a recipient address snapshot and preserves its original values; failures throw, no effects. */
 function parseAddress(value: unknown): components['schemas']['AddressSnapshot'] {
   return parseFields(value, {
     formatted: text(300),
     street: text(150),
-    districtNameZh: nullable(text(60)),
+    zoneNameZh: nullable(text(20)),
+    suburb: text(40),
     postcode: parsePostcode,
+    state: parseAustralianState,
   })
 }
 

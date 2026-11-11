@@ -37,6 +37,9 @@ it('renders full authorized detail and emits refund/back integration events', as
   wrappers.push(wrapper)
   await flushPromises()
   expect(wrapper.text()).toContain('0491 570 006')
+  expect(wrapper.text()).toContain('演示大区')
+  expect(wrapper.text()).toContain('Example Suburb')
+  expect(wrapper.text()).toContain('NSW / 2000')
   expect(wrapper.text()).toContain('快照商品')
   expect(wrapper.text()).toContain('A$ 84.00')
   expect(wrapper.text()).toContain('2026-11-02 18:00:00')
@@ -58,6 +61,7 @@ it('shows postal-specific actions and requires confirmation before a write', asy
     slotStartAt: null,
     slotEndAt: null,
   })
+  order.address = { ...order.address, zoneNameZh: null, postcode: '6000', state: 'WA' }
   vi.spyOn(orderApi, 'get').mockResolvedValue(order)
   const write = vi
     .spyOn(orderApi, 'startDelivery')
@@ -66,6 +70,8 @@ it('shows postal-specific actions and requires confirmation before a write', asy
   const wrapper = mount(OrderDetailView, { props: { orderId: order.id } })
   wrappers.push(wrapper)
   await flushPromises()
+  expect(wrapper.text()).toMatch(/配送大区\s*—/)
+  expect(wrapper.text()).toContain('WA / 6000')
   expect(wrapper.text()).not.toContain('配送日期')
   expect(wrapper.text()).not.toContain('配送时间窗口')
   for (const button of wrapper.findAll('button'))
@@ -87,6 +93,9 @@ it('hides recipient information and operations on forbidden detail', async funct
   expect(wrapper.text()).toContain(ERROR_CODE.FORBIDDEN.message)
   expect(wrapper.text()).not.toContain('收货电话')
   expect(wrapper.text()).not.toContain('0491 570 006')
+  expect(wrapper.text()).not.toContain('配送大区')
+  expect(wrapper.text()).not.toContain('Example Suburb')
+  expect(wrapper.text()).not.toContain('NSW / 2000')
   expect(wrapper.text()).not.toContain('开始配送')
 })
 

@@ -43,8 +43,10 @@ function createFixture(status: OrderStatus, fulfillment: Fulfillment, index: num
     address: {
       formatted: '虚构演示地址，请勿实际配送',
       street: 'Example Street（虚构街道）',
-      districtNameZh: '演示区域',
+      zoneNameZh: local ? '演示大区' : null,
+      suburb: local ? 'Example Sydney Suburb' : 'Example Perth Suburb',
       postcode: local ? '2000' : '6000',
+      state: local ? 'NSW' : 'WA',
     },
     deliveryDate: local ? '2026-11-03' : null,
     slotNameZh: local ? '演示晚间时段' : null,

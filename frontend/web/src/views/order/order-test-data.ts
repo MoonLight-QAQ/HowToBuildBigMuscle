@@ -20,8 +20,10 @@ export function createOrder(overrides: Partial<Order> = {}): Order {
     address: {
       formatted: '演示地址，请勿配送',
       street: '示例街道',
-      districtNameZh: '演示区域',
+      zoneNameZh: '演示大区',
+      suburb: 'Example Suburb',
       postcode: '2000',
+      state: 'NSW',
     },
     deliveryDate: '2026-11-02',
     slotNameZh: '演示时段',
