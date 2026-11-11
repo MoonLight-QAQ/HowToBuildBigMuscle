@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import { useAuthStore } from '@/stores/auth'
-import { HOME_PATH, setupAuthGuard } from './guard'
+import { setupAuthGuard } from './guard'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -32,9 +32,9 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
 
-  // ===== 兜底：不存在的路径回到首页 =====
-  // 必须放在路由表最后，各模块的路由都加在它前面。未登录时会再由守卫跳到登录页
-  { path: '/:pathMatch(.*)*', redirect: HOME_PATH },
+  // TODO(W-03)：添加登录页后再加兜底路由 { path: '/:pathMatch(.*)*', redirect: HOME_PATH }。
+  // 兜底路由优先级最低，只匹配其他路由都匹配不到的路径，放在哪里都可以。
+  // 不能在登录页之前加：否则 /login 会被它重定向到 /，再被守卫重定向回 /login，陷入循环。
 ]
 
 const router = createRouter({
