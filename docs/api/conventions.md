@@ -30,9 +30,34 @@
 | `GET` | 查询，不改变任何数据 | `GET /orders` |
 | `POST` | 新增；执行动作 | `POST /products`、`POST /refunds/{id}/approve` |
 | `PUT` | 修改整个资源（请求中带全部可编辑字段） | `PUT /products/{id}` |
-| `DELETE` | 删除 | `DELETE /mall-categories/{id}` |
+| `DELETE` | 删除（一律软删除，见下文） | `DELETE /mall-categories/{id}` |
 
 不使用 `PATCH`。
+
+### 删除
+
+所有数据一律**软删除**，不做物理删除。
+
+- `DELETE` 接口只给数据打上删除标记，数据库中的记录保留。
+- 列表接口不返回已删除的数据。按 ID 访问已删除的资源，返回 `NOT_FOUND`。
+- 名称唯一等校验只在未删除的数据中进行，已删除数据的名称可以再次使用。
+- 其他数据引用了已删除的数据时（如已下架商品所属的类目），照常返回被引用数据的名称，不返回 `null`。
+- 新增或修改时，请求中引用了已删除的数据，返回 `VALIDATION_FAILED`。
+- 删除关联（如把 suburb 移出配送大区）同样是软删除，之后可以重新建立关联。
+
+### 数据库公共字段
+
+每张表都必须有以下五个字段。字段的具体类型和取值，在表设计阶段确定。
+
+| 字段 | 含义 | 接口中 |
+| --- | --- | --- |
+| `is_deleted` | 软删除标记 | 不返回 |
+| `create_time` | 创建时间 | 需要时返回为 `createdAt` |
+| `update_time` | 最后修改时间 | 需要时返回为 `updatedAt` |
+| `create_by` | 创建人 | 不返回 |
+| `update_by` | 最后修改人 | 不返回 |
+
+接口是否返回 `createdAt`、`updatedAt`，以字段清单为准。
 
 ## 3. 请求
 

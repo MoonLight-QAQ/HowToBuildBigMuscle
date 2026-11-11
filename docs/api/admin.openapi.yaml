@@ -1689,6 +1689,8 @@ components:
         - CATEGORY_IN_USE
         - STOCK_BELOW_LOCKED
         - LAST_SLOT
+        - SUBURB_IN_OTHER_ZONE
+        - SUBURB_STATE_MISMATCH
         - LISTING_NOT_ON_SALE
         - REFUND_PAYOUT_FAILED
         - UPLOAD_NOT_ALLOWED

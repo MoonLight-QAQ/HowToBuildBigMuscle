@@ -491,7 +491,7 @@ export interface components {
          *     需要新的错误码时，先加到 conventions.md，再加到这里。
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
+        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "SUBURB_IN_OTHER_ZONE" | "SUBURB_STATE_MISMATCH" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
         /** @description 分页信息。分页列表的 data 由它和 items 组成，见文件开头的示例 */
         PageMeta: {
             /** @description 总条数 */
