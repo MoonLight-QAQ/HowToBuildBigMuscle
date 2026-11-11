@@ -324,6 +324,170 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suburbs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 搜索 suburb 字典
+         * @description suburb 字典从澳洲官方数据导入，后台**只读**：不提供新增、修改、删除接口。
+         *     用于往配送大区里添加 suburb 时查找。
+         *     - keyword：全为数字时按邮编**前缀**匹配（如 `20` 匹配 2000～2099）；否则按名称做不区分大小写的包含匹配。不传时不按关键字过滤。
+         *     - state：按州筛选，不传时返回所有州。往大区添加时，前端一般传大区所属城市的州。
+         *     - 按 name、postcode 从小到大排序。
+         *     - 返回结果不表示 suburb 是否已属于某个大区；加入时由 addZoneSuburbs 校验。
+         */
+        get: operations["searchSuburbs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 某个城市的配送大区列表
+         * @description 返回一个城市的全部配送大区。数量很少，不分页，按 sort 从小到大排序。
+         *     - 线下城市和快递城市都有大区：大区圈定城市的服务范围，城市所有大区中的 suburb 就是这个城市的范围。
+         *     - deliverable、localFeeCents 只对线下订单生效；快递城市的大区只用于圈定范围，这两个字段照常返回，但不起作用。
+         *     - 大区不能删除，所以总是返回该城市的全部大区。
+         */
+        get: operations["listDeliveryZones"];
+        put?: never;
+        /**
+         * 新增配送大区
+         * @description - cityId 必填，**创建后不能修改**：修改会让大区成员与新城市的州不一致。城市不存在时返回 VALIDATION_FAILED。
+         *     - 中文名和英文名在**同一城市内**不能与其他大区重复，否则返回 NAME_DUPLICATED；不同城市可以同名。
+         *     - deliverable 是大区内 suburb 的默认可送设置；localFeeCents 为 null 时使用全店统一配送费，不为 null 时必须 ≥ 0。两者只对线下订单生效。
+         *     - 新大区没有成员，suburbCount 为 0，需要再用 addZoneSuburbs 加入 suburb。
+         *     - 只影响之后的新订单。
+         */
+        post: operations["createDeliveryZone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改配送大区
+         * @description 修改大区的名称、默认可送设置、运费和排序。请求中带全部可编辑字段。
+         *     - 请求体**不包含 cityId**，所属城市创建后不能修改；出现时返回 VALIDATION_FAILED。
+         *     - 名称在同一城市内不能与其他大区重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - 修改 deliverable 只改变**跟随大区**的成员（deliverableOverride 为 null）；单独设置过的成员不变。
+         *     - 只影响之后的新订单，已有订单使用下单时的地址和运费快照。
+         *     - 大区不能删除，不再使用时把其中的 suburb 移出。
+         *     - 配送大区不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateDeliveryZone"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}/suburbs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 配送大区的成员列表
+         * @description 返回大区内的全部 suburb，不分页，按 suburb 的 name、postcode 从小到大排序。
+         *     - deliverable 是**最终**可送：deliverableOverride 不为 null 时取它，否则取大区的 deliverable。
+         *     - localFeeCents 是**实际**的线下配送费：大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。
+         *     - 两个计算字段只对线下订单生效；快递城市的大区照常返回，但不起作用。
+         */
+        get: operations["listZoneSuburbs"];
+        put?: never;
+        /**
+         * 往配送大区加入 suburb
+         * @description 一次加入一个或多个 suburb，新成员的 deliverableOverride 为 null（跟随大区）。
+         *
+         *     **两条校验：**
+         *     1. 一个 suburb **最多属于一个**配送大区（包括其他城市的大区）。已属于另一个大区时返回 SUBURB_IN_OTHER_ZONE，需要先从原来的大区移出。
+         *     2. suburb 的 state 必须与大区所属城市的 state 一致，否则返回 SUBURB_STATE_MISMATCH。
+         *
+         *     **整批处理规则：**
+         *     - 整批**原子**处理：任何一个 suburb 不通过校验，整批都不加入。
+         *     - 出错时 details 列出每个出错的 suburb，field 为 `suburbIds[下标]`，如 `suburbIds[2]`。
+         *       同时有两种业务错误时，code 取 SUBURB_IN_OTHER_ZONE，details 中逐项写明原因。
+         *     - 已经在**本大区**的 suburb 直接跳过，不报错，可以重复提交。
+         *     - suburbIds 中有不存在的 suburb 时返回 VALIDATION_FAILED。
+         *     - 移出大区后，可以重新加入这个或其他大区。
+         *
+         *     只影响之后的新订单。成功后用 listZoneSuburbs 和 listDeliveryZones 重新读取成员和 suburbCount。
+         */
+        post: operations["addZoneSuburbs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}/suburbs/{suburbId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 单独设置成员是否可送
+         * @description 设置一个成员的 deliverableOverride：true 或 false 表示单独设置，null 表示恢复跟随大区。
+         *     - 只对线下订单生效。
+         *     - suburb 不在这个大区中时返回 NOT_FOUND。
+         *     - 只影响之后的新订单。
+         */
+        put: operations["updateZoneSuburb"];
+        post?: never;
+        /**
+         * 把 suburb 移出配送大区
+         * @description 只删除 suburb 与大区的**关联**（软删除），不影响字典中的 suburb，也不删除大区。
+         *     - 移出后，这个 suburb 不再属于该城市的范围：新地址越界，线下也不可送。已有订单使用下单时的快照，不受影响。
+         *     - 移出后可以重新加入这个或其他大区。
+         *     - suburb 不在这个大区中时返回 NOT_FOUND。
+         */
+        delete: operations["removeZoneSuburb"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1228,6 +1392,161 @@ export interface components {
             /** @description 排序，越小越靠前 */
             sort: number;
         };
+        /**
+         * @description suburb 字典中的一项。从官方数据导入，后台只读。name + postcode + state 唯一；不包含城市
+         * @example {
+         *       "id": "1854239876543209500",
+         *       "name": "Leichhardt",
+         *       "postcode": "2040",
+         *       "state": "NSW"
+         *     }
+         */
+        Suburb: {
+            readonly id: components["schemas"]["Id"];
+            /** @description suburb 名称，如 Leichhardt */
+            readonly name: string;
+            /** @description 四位邮编，按字符串保存，保留开头的 0（如 0800） */
+            readonly postcode: string;
+            readonly state: components["schemas"]["AustralianState"];
+        };
+        /**
+         * @description suburb 搜索结果的分页
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "1854239876543209500",
+         *           "name": "Leichhardt",
+         *           "postcode": "2040",
+         *           "state": "NSW"
+         *         }
+         *       ],
+         *       "total": 1,
+         *       "page": 1,
+         *       "pageSize": 20
+         *     }
+         */
+        SuburbPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Suburb"][];
+        };
+        /**
+         * @description 配送大区。属于一个城市，圈定城市的服务范围；deliverable 和 localFeeCents 只对线下订单生效。大区不能删除
+         * @example {
+         *       "id": "1854239876543209480",
+         *       "cityId": "1854239876543209472",
+         *       "nameZh": "内西区",
+         *       "nameEn": "Inner West",
+         *       "deliverable": true,
+         *       "localFeeCents": null,
+         *       "sort": 1,
+         *       "suburbCount": 2
+         *     }
+         */
+        DeliveryZone: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 所属城市。创建后不能修改 */
+            cityId: components["schemas"]["Id"];
+            /** @description 同一城市内不能重复 */
+            nameZh: string;
+            /** @description 同一城市内不能重复 */
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置。只对线下订单生效 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费。为 null 时使用全店统一配送费。只对线下订单生效 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+            /** @description 大区内的 suburb 数 */
+            readonly suburbCount: number;
+        };
+        /**
+         * @description 新增配送大区的请求体
+         * @example {
+         *       "cityId": "1854239876543209472",
+         *       "nameZh": "东区",
+         *       "nameEn": "Eastern Suburbs",
+         *       "deliverable": true,
+         *       "localFeeCents": 800,
+         *       "sort": 3
+         *     }
+         */
+        DeliveryZoneCreateInput: {
+            /** @description 所属城市。创建后不能修改 */
+            cityId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 修改配送大区的请求体。不包含 cityId，所属城市创建后不能修改
+         * @example {
+         *       "nameZh": "帕拉马塔",
+         *       "nameEn": "Parramatta",
+         *       "deliverable": true,
+         *       "localFeeCents": null,
+         *       "sort": 2
+         *     }
+         */
+        DeliveryZoneUpdateInput: {
+            nameZh: string;
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 配送大区的成员，即 suburb 与大区的关联。移出大区只删除关联，不影响字典
+         * @example {
+         *       "suburb": {
+         *         "id": "1854239876543209500",
+         *         "name": "Leichhardt",
+         *         "postcode": "2040",
+         *         "state": "NSW"
+         *       },
+         *       "deliverableOverride": null,
+         *       "deliverable": true,
+         *       "localFeeCents": 600
+         *     }
+         */
+        ZoneSuburb: {
+            suburb: components["schemas"]["Suburb"];
+            /** @description 单独设置是否可送。为 null 时跟随大区 */
+            deliverableOverride: boolean | null;
+            /** @description 最终是否可送 = deliverableOverride 不为 null 时取它，否则取大区的 deliverable。只对线下订单生效 */
+            readonly deliverable: boolean;
+            /** @description 实际的线下配送费 = 大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。只对线下订单生效 */
+            readonly localFeeCents: components["schemas"]["Cents"];
+        };
+        /**
+         * @description 往配送大区加入 suburb 的请求体
+         * @example {
+         *       "suburbIds": [
+         *         "1854239876543209500",
+         *         "1854239876543209501"
+         *       ]
+         *     }
+         */
+        AddZoneSuburbsInput: {
+            /** @description 要加入的 suburb ID，1～100 个，不能重复 */
+            suburbIds: components["schemas"]["Id"][];
+        };
+        /**
+         * @description 单独设置成员是否可送的请求体
+         * @example {
+         *       "deliverableOverride": false
+         *     }
+         */
+        UpdateZoneSuburbInput: {
+            /** @description true 或 false 表示单独设置；null 表示恢复跟随大区 */
+            deliverableOverride: boolean | null;
+        };
         /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
         Admin: {
             id: components["schemas"]["Id"];
@@ -2093,6 +2412,273 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description NAME_DUPLICATED（中文名或英文名与其他城市重复） */
             409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    searchSuburbs: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                /** @description 每页条数 */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description 名称或邮编的关键字。全为数字时按邮编前缀匹配，否则按名称包含匹配 */
+                keyword?: string;
+                /** @description 按州筛选，不传时返回所有州 */
+                state?: components["schemas"]["AustralianState"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["SuburbPage"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listDeliveryZones: {
+        parameters: {
+            query: {
+                /** @description 城市 ID */
+                cityId: components["schemas"]["Id"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["DeliveryZone"][];
+                        };
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDeliveryZone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryZoneCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的大区 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryZone"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliveryZone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryZoneUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的大区 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryZone"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listZoneSuburbs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["ZoneSuburb"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addZoneSuburbs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddZoneSuburbsInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description SUBURB_IN_OTHER_ZONE（有 suburb 已属于另一个配送大区）；SUBURB_STATE_MISMATCH（有 suburb 的州与大区所属城市的州不一致）。details 列出出错的 suburb */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateZoneSuburb: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateZoneSuburbInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的成员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["ZoneSuburb"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    removeZoneSuburb: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
+            404: components["responses"]["NotFound"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };

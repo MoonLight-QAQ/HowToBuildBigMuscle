@@ -1368,6 +1368,503 @@ paths:
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
 
+  # ---------- suburb 与配送大区 ----------
+
+  /suburbs:
+    get:
+      tags: [delivery]
+      operationId: searchSuburbs
+      summary: 搜索 suburb 字典
+      description: |
+        suburb 字典从澳洲官方数据导入，后台**只读**：不提供新增、修改、删除接口。
+        用于往配送大区里添加 suburb 时查找。
+        - keyword：全为数字时按邮编**前缀**匹配（如 `20` 匹配 2000～2099）；否则按名称做不区分大小写的包含匹配。不传时不按关键字过滤。
+        - state：按州筛选，不传时返回所有州。往大区添加时，前端一般传大区所属城市的州。
+        - 按 name、postcode 从小到大排序。
+        - 返回结果不表示 suburb 是否已属于某个大区；加入时由 addZoneSuburbs 校验。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          required: false
+          description: 名称或邮编的关键字。全为数字时按邮编前缀匹配，否则按名称包含匹配
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+        - name: state
+          in: query
+          required: false
+          description: 按州筛选，不传时返回所有州
+          schema:
+            $ref: '#/components/schemas/AustralianState'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SuburbPage'
+              examples:
+                current:
+                  summary: 按邮编前缀 20 搜索 NSW
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209501'
+                          name: Annandale
+                          postcode: '2038'
+                          state: NSW
+                        - id: '1854239876543209500'
+                          name: Leichhardt
+                          postcode: '2040'
+                          state: NSW
+                      total: 2
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 没有匹配的 suburb
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones:
+    get:
+      tags: [delivery]
+      operationId: listDeliveryZones
+      summary: 某个城市的配送大区列表
+      description: |
+        返回一个城市的全部配送大区。数量很少，不分页，按 sort 从小到大排序。
+        - 线下城市和快递城市都有大区：大区圈定城市的服务范围，城市所有大区中的 suburb 就是这个城市的范围。
+        - deliverable、localFeeCents 只对线下订单生效；快递城市的大区只用于圈定范围，这两个字段照常返回，但不起作用。
+        - 大区不能删除，所以总是返回该城市的全部大区。
+      parameters:
+        - name: cityId
+          in: query
+          required: true
+          description: 城市 ID
+          schema:
+            $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 悉尼的两个大区
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209480'
+                          cityId: '1854239876543209472'
+                          nameZh: 内西区
+                          nameEn: Inner West
+                          deliverable: true
+                          localFeeCents: null
+                          sort: 1
+                          suburbCount: 2
+                        - id: '1854239876543209481'
+                          cityId: '1854239876543209472'
+                          nameZh: 帕拉马塔
+                          nameEn: Parramatta
+                          deliverable: false
+                          localFeeCents: 1000
+                          sort: 2
+                          suburbCount: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: createDeliveryZone
+      summary: 新增配送大区
+      description: |
+        - cityId 必填，**创建后不能修改**：修改会让大区成员与新城市的州不一致。城市不存在时返回 VALIDATION_FAILED。
+        - 中文名和英文名在**同一城市内**不能与其他大区重复，否则返回 NAME_DUPLICATED；不同城市可以同名。
+        - deliverable 是大区内 suburb 的默认可送设置；localFeeCents 为 null 时使用全店统一配送费，不为 null 时必须 ≥ 0。两者只对线下订单生效。
+        - 新大区没有成员，suburbCount 为 0，需要再用 addZoneSuburbs 加入 suburb。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryZoneCreateInput'
+            examples:
+              current:
+                summary: 在悉尼新增一个大区
+                value:
+                  cityId: '1854239876543209472'
+                  nameZh: 东区
+                  nameEn: Eastern Suburbs
+                  deliverable: true
+                  localFeeCents: 800
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的大区
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 新建的大区
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209482'
+                      cityId: '1854239876543209472'
+                      nameZh: 东区
+                      nameEn: Eastern Suburbs
+                      deliverable: true
+                      localFeeCents: 800
+                      sort: 3
+                      suburbCount: 0
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [delivery]
+      operationId: updateDeliveryZone
+      summary: 修改配送大区
+      description: |
+        修改大区的名称、默认可送设置、运费和排序。请求中带全部可编辑字段。
+        - 请求体**不包含 cityId**，所属城市创建后不能修改；出现时返回 VALIDATION_FAILED。
+        - 名称在同一城市内不能与其他大区重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - 修改 deliverable 只改变**跟随大区**的成员（deliverableOverride 为 null）；单独设置过的成员不变。
+        - 只影响之后的新订单，已有订单使用下单时的地址和运费快照。
+        - 大区不能删除，不再使用时把其中的 suburb 移出。
+        - 配送大区不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryZoneUpdateInput'
+            examples:
+              current:
+                summary: 帕拉马塔改为可送，使用全店统一配送费
+                value:
+                  nameZh: 帕拉马塔
+                  nameEn: Parramatta
+                  deliverable: true
+                  localFeeCents: null
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回修改后的大区
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 修改后的大区
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209481'
+                      cityId: '1854239876543209472'
+                      nameZh: 帕拉马塔
+                      nameEn: Parramatta
+                      deliverable: true
+                      localFeeCents: null
+                      sort: 2
+                      suburbCount: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}/suburbs:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [delivery]
+      operationId: listZoneSuburbs
+      summary: 配送大区的成员列表
+      description: |
+        返回大区内的全部 suburb，不分页，按 suburb 的 name、postcode 从小到大排序。
+        - deliverable 是**最终**可送：deliverableOverride 不为 null 时取它，否则取大区的 deliverable。
+        - localFeeCents 是**实际**的线下配送费：大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。
+        - 两个计算字段只对线下订单生效；快递城市的大区照常返回，但不起作用。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ZoneSuburb'
+              examples:
+                current:
+                  summary: 内西区的两个成员，其中一个单独设为不可送
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - suburb:
+                            id: '1854239876543209501'
+                            name: Annandale
+                            postcode: '2038'
+                            state: NSW
+                          deliverableOverride: false
+                          deliverable: false
+                          localFeeCents: 600
+                        - suburb:
+                            id: '1854239876543209500'
+                            name: Leichhardt
+                            postcode: '2040'
+                            state: NSW
+                          deliverableOverride: null
+                          deliverable: true
+                          localFeeCents: 600
+                empty:
+                  summary: 大区还没有成员
+                  value:
+                    ok: true
+                    data:
+                      items: []
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: addZoneSuburbs
+      summary: 往配送大区加入 suburb
+      description: |
+        一次加入一个或多个 suburb，新成员的 deliverableOverride 为 null（跟随大区）。
+
+        **两条校验：**
+        1. 一个 suburb **最多属于一个**配送大区（包括其他城市的大区）。已属于另一个大区时返回 SUBURB_IN_OTHER_ZONE，需要先从原来的大区移出。
+        2. suburb 的 state 必须与大区所属城市的 state 一致，否则返回 SUBURB_STATE_MISMATCH。
+
+        **整批处理规则：**
+        - 整批**原子**处理：任何一个 suburb 不通过校验，整批都不加入。
+        - 出错时 details 列出每个出错的 suburb，field 为 `suburbIds[下标]`，如 `suburbIds[2]`。
+          同时有两种业务错误时，code 取 SUBURB_IN_OTHER_ZONE，details 中逐项写明原因。
+        - 已经在**本大区**的 suburb 直接跳过，不报错，可以重复提交。
+        - suburbIds 中有不存在的 suburb 时返回 VALIDATION_FAILED。
+        - 移出大区后，可以重新加入这个或其他大区。
+
+        只影响之后的新订单。成功后用 listZoneSuburbs 和 listDeliveryZones 重新读取成员和 suburbCount。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddZoneSuburbsInput'
+            examples:
+              current:
+                summary: 加入两个 suburb
+                value:
+                  suburbIds:
+                    - '1854239876543209500'
+                    - '1854239876543209501'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: SUBURB_IN_OTHER_ZONE（有 suburb 已属于另一个配送大区）；SUBURB_STATE_MISMATCH（有 suburb 的州与大区所属城市的州不一致）。details 列出出错的 suburb
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}/suburbs/{suburbId}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - name: suburbId
+        in: path
+        required: true
+        description: suburb 的 ID
+        schema:
+          $ref: '#/components/schemas/Id'
+    put:
+      tags: [delivery]
+      operationId: updateZoneSuburb
+      summary: 单独设置成员是否可送
+      description: |
+        设置一个成员的 deliverableOverride：true 或 false 表示单独设置，null 表示恢复跟随大区。
+        - 只对线下订单生效。
+        - suburb 不在这个大区中时返回 NOT_FOUND。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateZoneSuburbInput'
+            examples:
+              current:
+                summary: 单独设为不可送
+                value:
+                  deliverableOverride: false
+              follow:
+                summary: 恢复跟随大区
+                value:
+                  deliverableOverride: null
+      responses:
+        '200':
+          description: 成功，返回修改后的成员
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ZoneSuburb'
+              examples:
+                current:
+                  summary: 单独设为不可送后
+                  value:
+                    ok: true
+                    data:
+                      suburb:
+                        id: '1854239876543209501'
+                        name: Annandale
+                        postcode: '2038'
+                        state: NSW
+                      deliverableOverride: false
+                      deliverable: false
+                      localFeeCents: 600
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    delete:
+      tags: [delivery]
+      operationId: removeZoneSuburb
+      summary: 把 suburb 移出配送大区
+      description: |
+        只删除 suburb 与大区的**关联**（软删除），不影响字典中的 suburb，也不删除大区。
+        - 移出后，这个 suburb 不再属于该城市的范围：新地址越界，线下也不可送。已有订单使用下单时的快照，不受影响。
+        - 移出后可以重新加入这个或其他大区。
+        - suburb 不在这个大区中时返回 NOT_FOUND。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
   # ===== B 区块结束 =====
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -3015,6 +3512,227 @@ components:
           fulfillment: post
           timezone: Australia/Sydney
           sort: 1
+
+    # ---------- suburb 与配送大区 ----------
+
+    Suburb:
+      type: object
+      description: suburb 字典中的一项。从官方数据导入，后台只读。name + postcode + state 唯一；不包含城市
+      additionalProperties: false
+      required: [id, name, postcode, state]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          readOnly: true
+          description: suburb 名称，如 Leichhardt
+        postcode:
+          type: string
+          pattern: '^[0-9]{4}$'
+          readOnly: true
+          description: 四位邮编，按字符串保存，保留开头的 0（如 0800）
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          readOnly: true
+      examples:
+        - id: '1854239876543209500'
+          name: Leichhardt
+          postcode: '2040'
+          state: NSW
+    SuburbPage:
+      description: suburb 搜索结果的分页
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Suburb'
+      examples:
+        - items:
+            - id: '1854239876543209500'
+              name: Leichhardt
+              postcode: '2040'
+              state: NSW
+          total: 1
+          page: 1
+          pageSize: 20
+    DeliveryZone:
+      type: object
+      description: 配送大区。属于一个城市，圈定城市的服务范围；deliverable 和 localFeeCents 只对线下订单生效。大区不能删除
+      additionalProperties: false
+      required: [id, cityId, nameZh, nameEn, deliverable, localFeeCents, sort, suburbCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        cityId:
+          $ref: '#/components/schemas/Id'
+          description: 所属城市。创建后不能修改
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 同一城市内不能重复
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 同一城市内不能重复
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置。只对线下订单生效
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费。为 null 时使用全店统一配送费。只对线下订单生效
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+        suburbCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 大区内的 suburb 数
+      examples:
+        - id: '1854239876543209480'
+          cityId: '1854239876543209472'
+          nameZh: 内西区
+          nameEn: Inner West
+          deliverable: true
+          localFeeCents: null
+          sort: 1
+          suburbCount: 2
+    DeliveryZoneCreateInput:
+      type: object
+      description: 新增配送大区的请求体
+      additionalProperties: false
+      required: [cityId, nameZh, nameEn, deliverable, localFeeCents, sort]
+      properties:
+        cityId:
+          $ref: '#/components/schemas/Id'
+          description: 所属城市。创建后不能修改
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - cityId: '1854239876543209472'
+          nameZh: 东区
+          nameEn: Eastern Suburbs
+          deliverable: true
+          localFeeCents: 800
+          sort: 3
+    DeliveryZoneUpdateInput:
+      type: object
+      description: 修改配送大区的请求体。不包含 cityId，所属城市创建后不能修改
+      additionalProperties: false
+      required: [nameZh, nameEn, deliverable, localFeeCents, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 帕拉马塔
+          nameEn: Parramatta
+          deliverable: true
+          localFeeCents: null
+          sort: 2
+    ZoneSuburb:
+      type: object
+      description: 配送大区的成员，即 suburb 与大区的关联。移出大区只删除关联，不影响字典
+      additionalProperties: false
+      required: [suburb, deliverableOverride, deliverable, localFeeCents]
+      properties:
+        suburb:
+          $ref: '#/components/schemas/Suburb'
+        deliverableOverride:
+          type: [boolean, 'null']
+          description: 单独设置是否可送。为 null 时跟随大区
+        deliverable:
+          type: boolean
+          readOnly: true
+          description: 最终是否可送 = deliverableOverride 不为 null 时取它，否则取大区的 deliverable。只对线下订单生效
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          readOnly: true
+          description: 实际的线下配送费 = 大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。只对线下订单生效
+      examples:
+        - suburb:
+            id: '1854239876543209500'
+            name: Leichhardt
+            postcode: '2040'
+            state: NSW
+          deliverableOverride: null
+          deliverable: true
+          localFeeCents: 600
+    AddZoneSuburbsInput:
+      type: object
+      description: 往配送大区加入 suburb 的请求体
+      additionalProperties: false
+      required: [suburbIds]
+      properties:
+        suburbIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          description: 要加入的 suburb ID，1～100 个，不能重复
+          items:
+            $ref: '#/components/schemas/Id'
+      examples:
+        - suburbIds:
+            - '1854239876543209500'
+            - '1854239876543209501'
+    UpdateZoneSuburbInput:
+      type: object
+      description: 单独设置成员是否可送的请求体
+      additionalProperties: false
+      required: [deliverableOverride]
+      properties:
+        deliverableOverride:
+          type: [boolean, 'null']
+          description: true 或 false 表示单独设置；null 表示恢复跟随大区
+      examples:
+        - deliverableOverride: false
 
     # ===== B 区块结束 =====
 
