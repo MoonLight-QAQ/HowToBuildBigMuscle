@@ -29,6 +29,13 @@ describe('getRedirectPath', () => {
     expect(getRedirectPath('/orders?status=pending')).toBe('/orders?status=pending')
   })
 
+  it.each(['/files/.hidden', '/a..b', '/orders/v1.2', '/orders?path=../x', '/orders#./top'])(
+    '%s 中的点不是独立路径段，接受',
+    (redirect) => {
+      expect(getRedirectPath(redirect)).toBe(redirect)
+    },
+  )
+
   it.each([
     ['不是字符串', undefined],
     ['数组', ['/orders']],
@@ -41,6 +48,12 @@ describe('getRedirectPath', () => {
     ['末尾带斜杠的登录页', `${LOGIN_PATH}/`],
     ['大小写不同的登录页', '/Login?redirect=/orders'],
     ['带锚点的登录页', `${LOGIN_PATH}#top`],
+    ['含 . 路径段', '/./login'],
+    ['含 .. 路径段', '/orders/../login?redirect=/orders'],
+    ['末尾是 . 路径段', '/orders/.'],
+    ['含编码的 . 路径段', '/%2e/login'],
+    ['含编码的 .. 路径段', '/orders/%2E%2e/login'],
+    ['含半编码的 .. 路径段', '/orders/.%2e/login'],
   ])('%s时回到首页', (_name, redirect) => {
     expect(getRedirectPath(redirect)).toBe(HOME_PATH)
   })

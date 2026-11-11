@@ -20,14 +20,28 @@ export function isLoginPath(path: string): boolean {
  * 从路由的 query.redirect 中取出登录后要回到的路径。
  * 只接受站内路径（以单个 / 开头、不含反斜杠），防止被构造成跳到外部网站的链接。
  * 浏览器会把反斜杠当作 /，例如 /\evil.example.com 会被解析成协议相对地址。
+ * 也不接受 . 和 .. 路径段（含编码形式 %2e）：它们会被解析掉，例如 /./login 实际是登录页，
+ * 可以绕过下面的登录页判断，用层层嵌套的 redirect 让登录后连续跳转多次。
  */
 export function getRedirectPath(redirect: unknown): string {
   if (typeof redirect !== 'string') return HOME_PATH
   if (!redirect.startsWith('/') || redirect.startsWith('//')) return HOME_PATH
   if (redirect.includes('\\')) return HOME_PATH
-  // 去掉查询参数和锚点后判断是否是登录页，避免登录后又回到登录页
-  if (isLoginPath(redirect.split(/[?#]/)[0] ?? '')) return HOME_PATH
+  // 只检查路径部分，查询参数和锚点不影响
+  const path = redirect.split(/[?#]/)[0] ?? ''
+  if (hasDotSegment(path)) return HOME_PATH
+  // 避免登录后又回到登录页
+  if (isLoginPath(path)) return HOME_PATH
   return redirect
+}
+
+/** 路径中是否有 . 或 .. 路径段，%2e 视为 . */
+function hasDotSegment(path: string): boolean {
+  return path
+    .toLowerCase()
+    .replaceAll('%2e', '.')
+    .split('/')
+    .some((segment) => segment === '.' || segment === '..')
 }
 
 /**
