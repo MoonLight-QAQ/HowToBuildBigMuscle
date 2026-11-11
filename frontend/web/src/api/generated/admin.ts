@@ -728,6 +728,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/uploads/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 申请图片上传地址
+         * @description 图片由前端直接上传到 AWS S3，不经过后端中转。流程：
+         *     1. 调用本接口，告诉服务器图片的用途、类型和大小。
+         *     2. 服务器校验后返回有时效的预签名上传地址 uploadUrl 和对象 key。
+         *     3. 前端用 **PUT** 把文件上传到 uploadUrl。请求头 Content-Type 必须与申请时的 contentType 一致，
+         *        文件大小必须与 size 一致，否则 S3 拒绝上传。
+         *     4. 前端读取图片的宽高，把 `{ key, width, height }` 提交给业务接口（如 createProduct 的 images）。
+         *
+         *     **限制：**
+         *     - purpose 目前只有 product（商品图片）。
+         *     - contentType 只允许 image/jpeg、image/png、image/webp。
+         *     - size 为文件的字节数，不超过 5MB（5242880 字节）。
+         *
+         *     **错误码的区分：**
+         *     - 字段缺失、类型不对（如 size 不是整数）、出现未定义的字段：VALIDATION_FAILED。
+         *     - 字段齐全，但图片类型不在允许范围内，或 size 超过 5MB：UPLOAD_NOT_ALLOWED。
+         *       前端据此提示「只支持 JPG、PNG、WebP 格式，且不超过 5MB」。
+         *
+         *     **其他：**
+         *     - uploadUrl 在 expiresAt 之后失效，过期后重新申请。有效期由服务器决定，以 expiresAt 为准。
+         *     - key 由服务器生成，前端不要修改，也不要据此拼接图片地址；显示图片时使用业务接口返回的 url。
+         *     - 申请了地址但没有提交给业务接口的图片，由服务器另行清理，前端不需要处理。
+         */
+        post: operations["presignUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -2086,6 +2126,49 @@ export interface components {
          */
         ProductPage: components["schemas"]["PageMeta"] & {
             items: components["schemas"]["Product"][];
+        };
+        /**
+         * @description 图片用途，服务器据此决定 key 的目录
+         *     - product：商品图片
+         * @enum {string}
+         */
+        UploadPurpose: "product";
+        /**
+         * @description 申请图片上传地址的请求体
+         * @example {
+         *       "purpose": "product",
+         *       "contentType": "image/jpeg",
+         *       "size": 1258291
+         *     }
+         */
+        PresignUploadInput: {
+            purpose: components["schemas"]["UploadPurpose"];
+            /**
+             * @description 图片的 MIME 类型。不在允许范围内时返回 UPLOAD_NOT_ALLOWED。上传时的 Content-Type 必须与它一致
+             * @enum {string}
+             */
+            contentType: "image/jpeg" | "image/png" | "image/webp";
+            /** @description 文件大小（字节），不超过 5MB。超过时返回 UPLOAD_NOT_ALLOWED */
+            size: number;
+        };
+        /**
+         * @description 预签名上传地址
+         * @example {
+         *       "key": "prod/product/2026/11/12/9f3c2a7e.jpg",
+         *       "uploadUrl": "https://example-bucket.s3.ap-southeast-2.amazonaws.com/prod/product/2026/11/12/9f3c2a7e.jpg?X-Amz-Signature=example",
+         *       "expiresAt": "2026-11-12T02:15:00Z"
+         *     }
+         */
+        PresignUploadResult: {
+            /** @description 对象 key，由服务器生成。上传成功后与图片宽高一起提交给业务接口 */
+            readonly key: components["schemas"]["ImageKey"];
+            /**
+             * Format: uri
+             * @description 预签名上传地址，用 PUT 上传。只用于上传，不能用来显示图片
+             */
+            readonly uploadUrl: string;
+            /** @description uploadUrl 的失效时间点，过期后重新申请 */
+            readonly expiresAt: components["schemas"]["DateTime"];
         };
         /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
         Admin: {
@@ -3629,6 +3712,38 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description VERSION_CONFLICT（提交的 version 已过期，商品已被他人修改。重新读取，不要盲目重试）；STOCK_BELOW_LOCKED（账面库存小于写入时的锁定量，如 message「账面库存不能小于已锁定的 3 件」，details 为 [{ field：stock，message：不能小于 3 }]） */
             409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    presignUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresignUploadInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回预签名上传地址和对象 key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["PresignUploadResult"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（字段缺失、类型不对、出现未定义的字段）；UPLOAD_NOT_ALLOWED（图片类型不是 JPG、PNG、WebP，或 size 超过 5MB） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
