@@ -488,6 +488,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/delivery-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查看配送费用
+         * @description 全店一份配置：线下统一配送费、快递邮费、包邮门槛。
+         *     - localFeeCents 在配送大区的 localFeeCents 为 null 时使用，只对线下订单生效。线下订单没有包邮。
+         *     - postFeeCents 和 freeShippingThresholdCents 只对快递订单生效：商品金额达到门槛时邮费为 0。
+         *     - 返回的 version 在修改时原样提交。
+         */
+        get: operations["getDeliveryFees"];
+        /**
+         * 修改配送费用
+         * @description 请求中带全部三个金额和读取到的 version。三个金额都是 ≥ 0 的整数，单位为分。
+         *
+         *     **乐观锁：**
+         *     - 提交 getDeliveryFees 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+         *     - 版本不一致（其他人在此期间改过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+         *       「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+         *     - 写入成功后 version 加 1，返回最新的配置。
+         *
+         *     只影响之后的新订单，已有订单使用下单时的运费快照。
+         */
+        put: operations["updateDeliveryFees"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 送达时段列表
+         * @description 时段每天共用，不绑定具体日期。返回全部时段，**包括已停用的**；不分页，按 sort 从小到大排序。
+         *     停用的时段，新的线下订单不能选。快递订单不选时段。
+         */
+        get: operations["listDeliverySlots"];
+        put?: never;
+        /**
+         * 新增送达时段
+         * @description - 中文名和英文名都必填，都不能与已有时段重复，否则返回 NAME_DUPLICATED。
+         *     - startTime、endTime 为 HH:mm 钟点，endTime 必须晚于 startTime，否则返回 VALIDATION_FAILED。不支持跨午夜的时段。
+         *     - 钟点按城市当地时间理解。订单上的开始和结束时间点，是下单时用所选日期、这个钟点和城市时区算出的 UTC 时间。
+         *     - 只影响之后的新订单。
+         */
+        post: operations["createDeliverySlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-slots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改送达时段
+         * @description 修改名称、钟点、启用状态和排序。请求中带全部可编辑字段。停用和重新启用也通过本接口修改 enabled。
+         *     - 名称不能与其他时段重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - endTime 必须晚于 startTime。
+         *     - 停用后，新的线下订单不能选这个时段；停用最后一个启用中的时段不拦截（字段清单只规定删除时至少保留一个）。
+         *     - 只影响之后的新订单。已有订单的时段名称和开始、结束时间点是下单时的快照，不会改变。
+         *     - 时段不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateDeliverySlot"];
+        post?: never;
+        /**
+         * 删除送达时段
+         * @description 软删除。已有订单的时段是下单时的快照，不受影响。
+         *     - 至少要保留一个时段（启用或停用的都算）。删除最后一个时返回 LAST_SLOT。
+         *     - 删除后名称可以再次使用。
+         */
+        delete: operations["deleteDeliverySlot"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1546,6 +1643,91 @@ export interface components {
         UpdateZoneSuburbInput: {
             /** @description true 或 false 表示单独设置；null 表示恢复跟随大区 */
             deliverableOverride: boolean | null;
+        };
+        /**
+         * @description 配送费用，全店一份。修改只影响之后的新订单
+         * @example {
+         *       "localFeeCents": 600,
+         *       "postFeeCents": 800,
+         *       "freeShippingThresholdCents": 5000,
+         *       "version": 0
+         *     }
+         */
+        DeliveryConfig: {
+            /** @description 全店统一线下配送费，默认 600。配送大区的 localFeeCents 为 null 时使用 */
+            localFeeCents: components["schemas"]["Cents"];
+            /** @description 快递邮费，默认 800 */
+            postFeeCents: components["schemas"]["Cents"];
+            /** @description 包邮门槛，默认 5000。只对快递订单生效 */
+            freeShippingThresholdCents: components["schemas"]["Cents"];
+            readonly version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 修改配送费用的请求体。version 原样提交读取到的值
+         * @example {
+         *       "localFeeCents": 600,
+         *       "postFeeCents": 800,
+         *       "freeShippingThresholdCents": 100,
+         *       "version": 0
+         *     }
+         */
+        DeliveryConfigInput: {
+            /** @description 全店统一线下配送费，≥ 0 */
+            localFeeCents: components["schemas"]["Cents"];
+            /** @description 快递邮费，≥ 0 */
+            postFeeCents: components["schemas"]["Cents"];
+            /** @description 包邮门槛，≥ 0 */
+            freeShippingThresholdCents: components["schemas"]["Cents"];
+            /** @description 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT */
+            version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 送达时段。每天共用，不绑定具体日期。钟点按城市当地时间理解
+         * @example {
+         *       "id": "1854239876543209520",
+         *       "nameZh": "上午",
+         *       "nameEn": "Morning",
+         *       "startTime": "08:00",
+         *       "endTime": "12:00",
+         *       "enabled": true,
+         *       "sort": 1
+         *     }
+         */
+        DeliverySlot: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 如「上午」 */
+            nameZh: string;
+            /** @description 如 Morning */
+            nameEn: string;
+            /** @description 开始钟点 */
+            startTime: components["schemas"]["ClockTime"];
+            /** @description 结束钟点，必须晚于开始钟点 */
+            endTime: components["schemas"]["ClockTime"];
+            /** @description 停用后，新的线下订单不能选 */
+            enabled: boolean;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 新增和修改送达时段的请求体
+         * @example {
+         *       "nameZh": "晚上",
+         *       "nameEn": "Evening",
+         *       "startTime": "18:00",
+         *       "endTime": "20:00",
+         *       "enabled": true,
+         *       "sort": 3
+         *     }
+         */
+        DeliverySlotInput: {
+            nameZh: string;
+            nameEn: string;
+            startTime: components["schemas"]["ClockTime"];
+            /** @description 必须晚于 startTime */
+            endTime: components["schemas"]["ClockTime"];
+            enabled: boolean;
+            /** @description 排序，越小越靠前 */
+            sort: number;
         };
         /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
         Admin: {
@@ -2679,6 +2861,190 @@ export interface operations {
             401: components["responses"]["NeedLogin"];
             /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
             404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryConfig"];
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryConfigInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryConfig"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listDeliverySlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["DeliverySlot"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverySlotInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的时段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliverySlot"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有时段重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverySlotInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的时段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliverySlot"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（时段不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与其他时段重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（时段不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description LAST_SLOT（这是最后一个时段，至少要保留一个） */
+            409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };

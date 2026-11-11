@@ -1865,6 +1865,319 @@ paths:
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
 
+  # ---------- 配送费用与时段 ----------
+
+  /delivery-fees:
+    get:
+      tags: [delivery]
+      operationId: getDeliveryFees
+      summary: 查看配送费用
+      description: |
+        全店一份配置：线下统一配送费、快递邮费、包邮门槛。
+        - localFeeCents 在配送大区的 localFeeCents 为 null 时使用，只对线下订单生效。线下订单没有包邮。
+        - postFeeCents 和 freeShippingThresholdCents 只对快递订单生效：商品金额达到门槛时邮费为 0。
+        - 返回的 version 在修改时原样提交。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryConfig'
+              examples:
+                current:
+                  summary: 默认配置
+                  value:
+                    ok: true
+                    data:
+                      localFeeCents: 600
+                      postFeeCents: 800
+                      freeShippingThresholdCents: 5000
+                      version: 0
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    put:
+      tags: [delivery]
+      operationId: updateDeliveryFees
+      summary: 修改配送费用
+      description: |
+        请求中带全部三个金额和读取到的 version。三个金额都是 ≥ 0 的整数，单位为分。
+
+        **乐观锁：**
+        - 提交 getDeliveryFees 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+        - 版本不一致（其他人在此期间改过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+          「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+        - 写入成功后 version 加 1，返回最新的配置。
+
+        只影响之后的新订单，已有订单使用下单时的运费快照。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryConfigInput'
+            examples:
+              current:
+                summary: 包邮门槛改为 1 元
+                value:
+                  localFeeCents: 600
+                  postFeeCents: 800
+                  freeShippingThresholdCents: 100
+                  version: 0
+      responses:
+        '200':
+          description: 成功，返回修改后的配置
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryConfig'
+              examples:
+                current:
+                  summary: 修改后，version 加 1
+                  value:
+                    ok: true
+                    data:
+                      localFeeCents: 600
+                      postFeeCents: 800
+                      freeShippingThresholdCents: 100
+                      version: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-slots:
+    get:
+      tags: [delivery]
+      operationId: listDeliverySlots
+      summary: 送达时段列表
+      description: |
+        时段每天共用，不绑定具体日期。返回全部时段，**包括已停用的**；不分页，按 sort 从小到大排序。
+        停用的时段，新的线下订单不能选。快递订单不选时段。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 默认的上午、下午两个时段
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209520'
+                          nameZh: 上午
+                          nameEn: Morning
+                          startTime: '08:00'
+                          endTime: '12:00'
+                          enabled: true
+                          sort: 1
+                        - id: '1854239876543209521'
+                          nameZh: 下午
+                          nameEn: Afternoon
+                          startTime: '12:00'
+                          endTime: '17:00'
+                          enabled: true
+                          sort: 2
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: createDeliverySlot
+      summary: 新增送达时段
+      description: |
+        - 中文名和英文名都必填，都不能与已有时段重复，否则返回 NAME_DUPLICATED。
+        - startTime、endTime 为 HH:mm 钟点，endTime 必须晚于 startTime，否则返回 VALIDATION_FAILED。不支持跨午夜的时段。
+        - 钟点按城市当地时间理解。订单上的开始和结束时间点，是下单时用所选日期、这个钟点和城市时区算出的 UTC 时间。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverySlotInput'
+            examples:
+              current:
+                summary: 新增一个晚上时段
+                value:
+                  nameZh: 晚上
+                  nameEn: Evening
+                  startTime: '18:00'
+                  endTime: '20:00'
+                  enabled: true
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的时段
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 新建的时段
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209522'
+                      nameZh: 晚上
+                      nameEn: Evening
+                      startTime: '18:00'
+                      endTime: '20:00'
+                      enabled: true
+                      sort: 3
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有时段重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-slots/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [delivery]
+      operationId: updateDeliverySlot
+      summary: 修改送达时段
+      description: |
+        修改名称、钟点、启用状态和排序。请求中带全部可编辑字段。停用和重新启用也通过本接口修改 enabled。
+        - 名称不能与其他时段重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - endTime 必须晚于 startTime。
+        - 停用后，新的线下订单不能选这个时段；停用最后一个启用中的时段不拦截（字段清单只规定删除时至少保留一个）。
+        - 只影响之后的新订单。已有订单的时段名称和开始、结束时间点是下单时的快照，不会改变。
+        - 时段不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverySlotInput'
+            examples:
+              current:
+                summary: 停用下午时段
+                value:
+                  nameZh: 下午
+                  nameEn: Afternoon
+                  startTime: '12:00'
+                  endTime: '17:00'
+                  enabled: false
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回修改后的时段
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 停用后的时段
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209521'
+                      nameZh: 下午
+                      nameEn: Afternoon
+                      startTime: '12:00'
+                      endTime: '17:00'
+                      enabled: false
+                      sort: 2
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（时段不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与其他时段重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    delete:
+      tags: [delivery]
+      operationId: deleteDeliverySlot
+      summary: 删除送达时段
+      description: |
+        软删除。已有订单的时段是下单时的快照，不受影响。
+        - 至少要保留一个时段（启用或停用的都算）。删除最后一个时返回 LAST_SLOT。
+        - 删除后名称可以再次使用。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或 token 失效）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（时段不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: LAST_SLOT（这是最后一个时段，至少要保留一个）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
   # ===== B 区块结束 =====
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -3733,6 +4046,125 @@ components:
           description: true 或 false 表示单独设置；null 表示恢复跟随大区
       examples:
         - deliverableOverride: false
+
+    # ---------- 配送费用与时段 ----------
+
+    DeliveryConfig:
+      type: object
+      description: 配送费用，全店一份。修改只影响之后的新订单
+      additionalProperties: false
+      required: [localFeeCents, postFeeCents, freeShippingThresholdCents, version]
+      properties:
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 全店统一线下配送费，默认 600。配送大区的 localFeeCents 为 null 时使用
+        postFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 快递邮费，默认 800
+        freeShippingThresholdCents:
+          $ref: '#/components/schemas/Cents'
+          description: 包邮门槛，默认 5000。只对快递订单生效
+        version:
+          $ref: '#/components/schemas/Version'
+          readOnly: true
+      examples:
+        - localFeeCents: 600
+          postFeeCents: 800
+          freeShippingThresholdCents: 5000
+          version: 0
+    DeliveryConfigInput:
+      type: object
+      description: 修改配送费用的请求体。version 原样提交读取到的值
+      additionalProperties: false
+      required: [localFeeCents, postFeeCents, freeShippingThresholdCents, version]
+      properties:
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 全店统一线下配送费，≥ 0
+        postFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 快递邮费，≥ 0
+        freeShippingThresholdCents:
+          $ref: '#/components/schemas/Cents'
+          description: 包邮门槛，≥ 0
+        version:
+          $ref: '#/components/schemas/Version'
+          description: 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT
+      examples:
+        - localFeeCents: 600
+          postFeeCents: 800
+          freeShippingThresholdCents: 100
+          version: 0
+    DeliverySlot:
+      type: object
+      description: 送达时段。每天共用，不绑定具体日期。钟点按城市当地时间理解
+      additionalProperties: false
+      required: [id, nameZh, nameEn, startTime, endTime, enabled, sort]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 如「上午」
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 如 Morning
+        startTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 开始钟点
+        endTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 结束钟点，必须晚于开始钟点
+        enabled:
+          type: boolean
+          description: 停用后，新的线下订单不能选
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - id: '1854239876543209520'
+          nameZh: 上午
+          nameEn: Morning
+          startTime: '08:00'
+          endTime: '12:00'
+          enabled: true
+          sort: 1
+    DeliverySlotInput:
+      type: object
+      description: 新增和修改送达时段的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, startTime, endTime, enabled, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 20
+        startTime:
+          $ref: '#/components/schemas/ClockTime'
+        endTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 必须晚于 startTime
+        enabled:
+          type: boolean
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 晚上
+          nameEn: Evening
+          startTime: '18:00'
+          endTime: '20:00'
+          enabled: true
+          sort: 3
 
     # ===== B 区块结束 =====
 
