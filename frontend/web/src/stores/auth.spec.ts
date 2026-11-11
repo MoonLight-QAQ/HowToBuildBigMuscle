@@ -98,6 +98,51 @@ describe('useAuthStore', () => {
     expect(store.isLoggedIn(NOW)).toBe(true)
     setItem.mockRestore()
   })
+
+  describe('多标签页同步', () => {
+    function dispatchStorage(key: string | null) {
+      window.dispatchEvent(new StorageEvent('storage', { key }))
+    }
+
+    it('另一个标签页退出后，本页也变为未登录', () => {
+      const store = useAuthStore()
+      store.setSession(session)
+
+      localStorage.removeItem(SESSION_STORAGE_KEY)
+      dispatchStorage(SESSION_STORAGE_KEY)
+
+      expect(store.token).toBeNull()
+    })
+
+    it('另一个标签页清空 localStorage 后，本页也变为未登录', () => {
+      const store = useAuthStore()
+      store.setSession(session)
+
+      localStorage.clear()
+      dispatchStorage(null)
+
+      expect(store.token).toBeNull()
+    })
+
+    it('另一个标签页登录后，本页同步登录信息', () => {
+      const store = useAuthStore()
+
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+      dispatchStorage(SESSION_STORAGE_KEY)
+
+      expect(store.token).toBe('admin-token')
+    })
+
+    it('无关的键变化时，登录状态不变', () => {
+      const store = useAuthStore()
+      store.setSession(session)
+
+      localStorage.removeItem(SESSION_STORAGE_KEY)
+      dispatchStorage('other-key')
+
+      expect(store.token).toBe('admin-token')
+    })
+  })
 })
 
 describe('createAuthAdapter', () => {

@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import { useAuthStore } from '@/stores/auth'
-import { setupAuthGuard } from './guard'
+import { HOME_PATH, setupAuthGuard } from './guard'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -31,6 +31,10 @@ export const routes: RouteRecordRaw[] = [
       // { path: 'cities', name: 'CityList', component: () => import('@/views/city/CityListView.vue'), meta: { title: '城市' } }
     ],
   },
+
+  // ===== 兜底：不存在的路径回到首页 =====
+  // 必须放在路由表最后，各模块的路由都加在它前面。未登录时会再由守卫跳到登录页
+  { path: '/:pathMatch(.*)*', redirect: HOME_PATH },
 ]
 
 const router = createRouter({

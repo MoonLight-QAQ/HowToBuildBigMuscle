@@ -24,6 +24,7 @@ describe('getRedirectPath', () => {
     ['数组', ['/orders']],
     ['外部网址', 'https://evil.example.com'],
     ['协议相对地址', '//evil.example.com'],
+    ['含反斜杠', '/\\evil.example.com'],
     ['相对路径', 'orders'],
     ['登录页本身', LOGIN_PATH],
     ['带参数的登录页', `${LOGIN_PATH}?redirect=/orders`],

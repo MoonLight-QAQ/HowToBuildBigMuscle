@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { h } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import App from '@/App.vue'
 import AdminLayout from './AdminLayout.vue'
 import { MENU_GROUPS } from './menu'
 
@@ -23,7 +24,8 @@ async function mountAt(path: string) {
   })
   await router.push(path)
   await router.isReady()
-  const wrapper = mount(AdminLayout, { global: { plugins: [router, ElementPlus] } })
+  // 挂载 App，让 AdminLayout 由路由渲染，与真实应用一致
+  const wrapper = mount(App, { global: { plugins: [router, ElementPlus] } })
   return { router, wrapper }
 }
 
@@ -46,6 +48,11 @@ describe('AdminLayout', () => {
     }
   })
 
+  it('布局只渲染一次', async () => {
+    const { wrapper } = await mountAt('/')
+    expect(wrapper.findAll('.admin-layout')).toHaveLength(1)
+  })
+
   it('在内容区渲染子路由页面，并高亮所属导航', async () => {
     const { wrapper } = await mountAt('/orders/9000000000000000010')
     expect(wrapper.find('.admin-layout__main').text()).toContain('订单详情页面')
@@ -64,7 +71,7 @@ describe('AdminLayout', () => {
     expect(logoutButton).toBeDefined()
     await logoutButton?.trigger('click')
     await router.isReady()
-    await new Promise((resolve) => setTimeout(resolve))
+    await flushPromises()
 
     expect(useAuthStore().token).toBeNull()
     expect(router.currentRoute.value.path).toBe('/login')

@@ -75,6 +75,18 @@ export const useAuthStore = defineStore('auth', () => {
     writeSession(null)
   }
 
+  /**
+   * 同步其他标签页的登录和退出。
+   * 只更新状态，不在本页主动跳转：之后的路由跳转会被守卫拦下，
+   * 本页发出的请求不再带 token，收到 NEED_LOGIN 后由 createAuthAdapter 跳到登录页。
+   * key 为 null 表示另一个标签页执行了 localStorage.clear()。
+   */
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (event) => {
+      if (event.key === SESSION_STORAGE_KEY || event.key === null) session.value = readSession()
+    })
+  }
+
   return { token, admin, isLoggedIn, setSession, clear }
 })
 
