@@ -512,7 +512,15 @@ export interface components {
          */
         Fulfillment: "local" | "post";
         /**
-         * @description 澳洲州和领地的标准大写缩写；本定义位于 A 区，供订单地址快照引用。
+         * @description 澳洲州和领地的标准大写缩写。A、B 区块共用，供订单地址快照、城市及 suburb 字典引用。
+         *     - NSW：新南威尔士州
+         *     - VIC：维多利亚州
+         *     - QLD：昆士兰州
+         *     - WA：西澳大利亚州
+         *     - SA：南澳大利亚州
+         *     - TAS：塔斯马尼亚州
+         *     - ACT：澳大利亚首都领地
+         *     - NT：北领地
          * @enum {string}
          */
         AustralianState: "NSW" | "VIC" | "QLD" | "WA" | "SA" | "TAS" | "ACT" | "NT";
@@ -1010,7 +1018,7 @@ export interface components {
             fulfillment: components["schemas"]["Fulfillment"];
             /** @description 线下城市中至少有一个最终可送 suburb 的配送大区中文名，按大区 sort 排序。默认不可送但有成员覆盖为可送时纳入；默认可送但成员全部不可送时不纳入。快递城市为 []，不据此推断快递服务范围为空。 */
             deliverableZoneNamesZh: string[];
-        } & unknown;
+        };
         /** @description 服务端实时计算四项待办计数；配送配置和城市只读展示，不包含商城配置写接口。 */
         Summary: {
             pendingOrderCount: number;

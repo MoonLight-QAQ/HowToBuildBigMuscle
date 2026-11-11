@@ -1748,7 +1748,16 @@ components:
         - TAS
         - ACT
         - NT
-      description: 澳洲州和领地的标准大写缩写；本定义位于 A 区，供订单地址快照引用。
+      description: |
+        澳洲州和领地的标准大写缩写。A、B 区块共用，供订单地址快照、城市及 suburb 字典引用。
+        - NSW：新南威尔士州
+        - VIC：维多利亚州
+        - QLD：昆士兰州
+        - WA：西澳大利亚州
+        - SA：南澳大利亚州
+        - TAS：塔斯马尼亚州
+        - ACT：澳大利亚首都领地
+        - NT：北领地
     OrderStatus:
       type: string
       enum:
@@ -1853,7 +1862,7 @@ components:
         zoneNameZh:
           anyOf:
             - type: string
-              maxLength: 60
+              maxLength: 20
             - type: "null"
           description: 下单时配送大区中文名的快照；快递订单允许为 null，不按当前大区名称回算。
         suburb:
@@ -2483,24 +2492,13 @@ components:
           type: array
           items:
             type: string
-            maxLength: 40
+            maxLength: 20
           description: 线下城市中至少有一个最终可送 suburb 的配送大区中文名，按大区 sort 排序。默认不可送但有成员覆盖为可送时纳入；默认可送但成员全部不可送时不纳入。快递城市为 []，不据此推断快递服务范围为空。
       required:
         - id
         - nameZh
         - fulfillment
         - deliverableZoneNamesZh
-      allOf:
-        - if:
-            properties:
-              fulfillment:
-                const: post
-            required:
-              - fulfillment
-          then:
-            properties:
-              deliverableZoneNamesZh:
-                maxItems: 0
     Summary:
       type: object
       additionalProperties: false
