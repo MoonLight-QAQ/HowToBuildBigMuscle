@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteLocationNormalized } from 'vue-router'
-import { getRedirectPath, HOME_PATH, LOGIN_PATH, resolveNavigation } from './guard'
+import { getRedirectPath, HOME_PATH, isLoginPath, LOGIN_PATH, resolveNavigation } from './guard'
 
 type Target = Pick<RouteLocationNormalized, 'path' | 'fullPath' | 'meta' | 'query'>
 
@@ -13,6 +13,16 @@ function target(fullPath: string, meta: Target['meta'] = {}): Target {
     query: Object.fromEntries(url.searchParams),
   }
 }
+
+describe('isLoginPath', () => {
+  it.each([LOGIN_PATH, `${LOGIN_PATH}/`, '/Login', '/LOGIN/'])('%s 是登录页', (path) => {
+    expect(isLoginPath(path)).toBe(true)
+  })
+
+  it.each(['/', '/login-help', '/orders/login', '/loginx'])('%s 不是登录页', (path) => {
+    expect(isLoginPath(path)).toBe(false)
+  })
+})
 
 describe('getRedirectPath', () => {
   it('接受站内路径，保留查询参数', () => {
@@ -28,6 +38,9 @@ describe('getRedirectPath', () => {
     ['相对路径', 'orders'],
     ['登录页本身', LOGIN_PATH],
     ['带参数的登录页', `${LOGIN_PATH}?redirect=/orders`],
+    ['末尾带斜杠的登录页', `${LOGIN_PATH}/`],
+    ['大小写不同的登录页', '/Login?redirect=/orders'],
+    ['带锚点的登录页', `${LOGIN_PATH}#top`],
   ])('%s时回到首页', (_name, redirect) => {
     expect(getRedirectPath(redirect)).toBe(HOME_PATH)
   })
@@ -51,6 +64,14 @@ describe('resolveNavigation', () => {
 
   it('已登录访问登录页，跳回 redirect 指定的页面', () => {
     expect(resolveNavigation(target(`${LOGIN_PATH}?redirect=%2Fcities`), true)).toBe('/cities')
+  })
+
+  it.each([`${LOGIN_PATH}/`, '/Login'])('未登录访问 %s，视为登录页并放行', (path) => {
+    expect(resolveNavigation(target(path), false)).toBe(true)
+  })
+
+  it.each([`${LOGIN_PATH}/`, '/Login'])('已登录访问 %s，视为登录页并回到首页', (path) => {
+    expect(resolveNavigation(target(path), true)).toBe(HOME_PATH)
   })
 
   it('已登录访问登录页且没有 redirect，回到首页', () => {

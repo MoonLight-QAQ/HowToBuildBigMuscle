@@ -1,4 +1,5 @@
 // 后台左侧导航。分组和顺序以原型 docs/prototype/admin 为准，路径见 frontend/web/AGENTS.md。
+// TODO(W-12)：原型中「订单、退款、举报」带待处理数量角标，由概览任务 W-12 接入。
 
 export interface MenuItem {
   path: string

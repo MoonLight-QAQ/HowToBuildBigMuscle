@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { components } from '@/api/generated/admin'
-import { LOGIN_PATH } from '@/router/guard'
+import { isLoginPath, LOGIN_PATH } from '@/router/guard'
 import type { AuthAdapter } from '@/types/http'
 
 type LoginResult = components['schemas']['LoginResult']
@@ -80,6 +80,8 @@ export const useAuthStore = defineStore('auth', () => {
    * 只更新状态，不在本页主动跳转：之后的路由跳转会被守卫拦下，
    * 本页发出的请求不再带 token，收到 NEED_LOGIN 后由 createAuthAdapter 跳到登录页。
    * key 为 null 表示另一个标签页执行了 localStorage.clear()。
+   * 监听器不移除：正式运行时 store 只创建一次。测试中每个用例新建 Pinia 会留下旧 store 的监听器，
+   * 它们只更新各自的旧 store，不影响当前用例的结果。
    */
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (event) => {
@@ -103,7 +105,7 @@ export function createAuthAdapter(router: Router): AuthAdapter {
     async onNeedLogin() {
       useAuthStore().clear()
       const current = router.currentRoute.value
-      if (current.path === LOGIN_PATH) return
+      if (isLoginPath(current.path)) return
       await router.replace({ path: LOGIN_PATH, query: { redirect: current.fullPath } })
     },
   }

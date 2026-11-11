@@ -185,13 +185,16 @@ describe('createAuthAdapter', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/orders/1?tab=items')
   })
 
-  it('已在登录页时只清除登录信息，不再跳转', async () => {
-    useAuthStore().setSession(session)
-    const { router, adapter } = await setup('/login')
+  it.each(['/login', '/login/', '/Login'])(
+    '已在登录页（%s）时只清除登录信息，不再跳转',
+    async (path) => {
+      useAuthStore().setSession(session)
+      const { router, adapter } = await setup(path)
 
-    await adapter.onNeedLogin()
+      await adapter.onNeedLogin()
 
-    expect(useAuthStore().token).toBeNull()
-    expect(router.currentRoute.value.fullPath).toBe('/login')
-  })
+      expect(useAuthStore().token).toBeNull()
+      expect(router.currentRoute.value.fullPath).toBe(path)
+    },
+  )
 })

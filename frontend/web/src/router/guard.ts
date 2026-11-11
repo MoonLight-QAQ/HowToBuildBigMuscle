@@ -7,6 +7,16 @@ export const LOGIN_PATH = '/login'
 export const HOME_PATH = '/'
 
 /**
+ * 判断一个路径是否是登录页。
+ * Vue Router 默认不区分末尾斜杠和大小写，/login/、/Login 也会显示登录页，
+ * 所以比较前先去掉末尾斜杠并转为小写，不能直接用 === LOGIN_PATH。
+ * TODO(W-03)：登录路由有了 name 之后，可以改为按路由名判断。
+ */
+export function isLoginPath(path: string): boolean {
+  return path.replace(/\/+$/, '').toLowerCase() === LOGIN_PATH
+}
+
+/**
  * 从路由的 query.redirect 中取出登录后要回到的路径。
  * 只接受站内路径（以单个 / 开头、不含反斜杠），防止被构造成跳到外部网站的链接。
  * 浏览器会把反斜杠当作 /，例如 /\evil.example.com 会被解析成协议相对地址。
@@ -15,7 +25,8 @@ export function getRedirectPath(redirect: unknown): string {
   if (typeof redirect !== 'string') return HOME_PATH
   if (!redirect.startsWith('/') || redirect.startsWith('//')) return HOME_PATH
   if (redirect.includes('\\')) return HOME_PATH
-  if (redirect === LOGIN_PATH || redirect.startsWith(`${LOGIN_PATH}?`)) return HOME_PATH
+  // 去掉查询参数和锚点后判断是否是登录页，避免登录后又回到登录页
+  if (isLoginPath(redirect.split(/[?#]/)[0] ?? '')) return HOME_PATH
   return redirect
 }
 
@@ -28,7 +39,7 @@ export function resolveNavigation(
   isLoggedIn: boolean,
 ): true | RouteLocationRaw {
   // 已登录时再打开登录页，直接回到原本要去的页面
-  if (to.path === LOGIN_PATH) {
+  if (isLoginPath(to.path)) {
     return isLoggedIn ? getRedirectPath(to.query.redirect) : true
   }
 
