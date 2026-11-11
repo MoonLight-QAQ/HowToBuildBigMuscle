@@ -25,28 +25,35 @@ function readInteger(value: unknown): number {
   return value
 }
 
-/** 按Unicode码点校验最多40字字符串；空字符串合法，无副作用。 / Validate at most 40 Unicode code points, allowing empty text without effects. */
-function readName(value: unknown): string {
-  if (typeof value !== 'string' || [...value].length > 40) throw new TypeError('invalid-summary')
+/** 校验名称的Unicode码点数不超过指定上限；空字符串合法，无副作用。 / Validate a name against its Unicode code point limit, allowing empty text without effects. */
+function readName(value: unknown, maximum: number): string {
+  if (typeof value !== 'string' || [...value].length > maximum)
+    throw new TypeError('invalid-summary')
   return value
 }
 
-/** 解析城市配送投影；保留字符串ID并复制区域数组，非法值抛错。 / Parse a city projection, preserving string IDs and copying districts, or throw. */
+/** 校验配送大区名称，最多20个Unicode码点；非法值抛错，无副作用。 / Validate a zone name up to 20 Unicode code points, throwing on invalid input. */
+function readZoneName(value: unknown): string {
+  return readName(value, 20)
+}
+
+/** 解析城市配送投影；保留字符串ID和大区顺序，快递大区数组必须为空。 / Parse a city projection, preserving string IDs and zone order and requiring an empty list for post cities. */
 function parseCity(value: unknown): CityOverview {
-  const city = readRecord(value, ['id', 'nameZh', 'fulfillment', 'deliverableDistrictNamesZh'])
+  const city = readRecord(value, ['id', 'nameZh', 'fulfillment', 'deliverableZoneNamesZh'])
   if (
     typeof city.id !== 'string' ||
     !/^[0-9]{1,20}$/.test(city.id) ||
     (city.fulfillment !== 'local' && city.fulfillment !== 'post') ||
-    !Array.isArray(city.deliverableDistrictNamesZh)
+    !Array.isArray(city.deliverableZoneNamesZh) ||
+    (city.fulfillment === 'post' && city.deliverableZoneNamesZh.length > 0)
   ) {
     throw new TypeError('invalid-summary')
   }
   return {
     id: city.id,
-    nameZh: readName(city.nameZh),
+    nameZh: readName(city.nameZh, 40),
     fulfillment: city.fulfillment,
-    deliverableDistrictNamesZh: city.deliverableDistrictNamesZh.map(readName),
+    deliverableZoneNamesZh: city.deliverableZoneNamesZh.map(readZoneName),
   }
 }
 

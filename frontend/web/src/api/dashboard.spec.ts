@@ -47,7 +47,29 @@ function fixture(): Summary {
     deliveringOrderCount: 1,
     openRefundCount: 2,
     openReportCount: 2,
-    ...createDashboardData().delivery,
+    cities: [
+      {
+        id: '9000000000000000040',
+        nameZh: '虚构线下演示城市',
+        fulfillment: 'local',
+        deliverableZoneNamesZh: ['虚构可送大区甲', '虚构可送大区乙'],
+      },
+      {
+        id: '9000000000000000041',
+        nameZh: '虚构快递演示城市',
+        fulfillment: 'post',
+        deliverableZoneNamesZh: [],
+      },
+      {
+        id: '9000000000000000042',
+        nameZh: '虚构暂无可送大区城市',
+        fulfillment: 'local',
+        deliverableZoneNamesZh: [],
+      },
+    ],
+    localFeeCents: 600,
+    postFeeCents: 1000,
+    freeShippingThresholdCents: 10000,
   }
 }
 
@@ -173,9 +195,9 @@ const invalidCities = [
   { fulfillment: 'courier' },
   { nameZh: null },
   { nameZh: '字'.repeat(41) },
-  { deliverableDistrictNamesZh: null },
-  { deliverableDistrictNamesZh: [1] },
-  { deliverableDistrictNamesZh: ['区'.repeat(41)] },
+  { deliverableZoneNamesZh: null },
+  { deliverableZoneNamesZh: [1] },
+  { deliverableZoneNamesZh: ['😀'.repeat(21)] },
   { extra: true },
 ]
 
@@ -185,8 +207,8 @@ it.each(invalidCities)('拒绝非法城市字段 %j', function testInvalidCity(p
   expectInvalid({ ...fixture(), cities: [city] })
 })
 
-/** 每个城市字段都是必填，不对缺失区域列表补空。 / Require every city field, without filling missing district lists. */
-it.each(['id', 'nameZh', 'fulfillment', 'deliverableDistrictNamesZh'])(
+/** 每个城市字段都是必填，不对缺失大区列表补空。 / Require every city field, without filling missing zone lists. */
+it.each(['id', 'nameZh', 'fulfillment', 'deliverableZoneNamesZh'])(
   '城市缺少 %s 时拒绝',
   function testMissingCityField(key) {
     const city: Record<string, unknown> = { ...fixture().cities[0] }
@@ -195,26 +217,43 @@ it.each(['id', 'nameZh', 'fulfillment', 'deliverableDistrictNamesZh'])(
   },
 )
 
-/** 遵守码点长度，并保留契约允许的空名称、重复ID及快递区域。 / Respect Unicode length and permit schema-legal empty names, duplicate IDs, and post districts. */
-it('不额外限制合法字符串、重复城市和快递区域', function testSchemaBoundaries() {
+/** 旧区字段不能满足新契约。 / Reject a legacy district field in place of the required zone list. */
+it('拒绝只有旧配送区字段的响应', function testLegacyCity() {
+  const { id, nameZh, fulfillment } = fixture().cities[0]!
+  expectInvalid({
+    ...fixture(),
+    cities: [{ id, nameZh, fulfillment, deliverableDistrictNamesZh: ['旧配送区'] }],
+  })
+})
+
+/** 快递城市只接受空大区列表，非空时以协议错误结束请求。 / Require empty post zone lists and report nonempty lists as protocol errors. */
+it('拒绝快递城市的非空配送大区数组', async function testPostZones() {
+  const summary = fixture()
+  summary.cities[1]!.deliverableZoneNamesZh = ['快递范围不能写进线下大区摘要']
+  server.use(mockHttp.get(summaryURL, respond(summary)))
+  await expect(dashboardApi.get()).rejects.toMatchObject({ kind: 'protocol', status: 200 })
+})
+
+/** 城市与配送大区分别按40和20码点校验，保留合法空名称和原顺序。 / Enforce 40 and 20 code point limits, preserving valid empty names and source order. */
+it('保留合法的城市、大区名称、重复城市ID和大区顺序', function testSchemaBoundaries() {
   const city = {
     id: '0'.repeat(20),
     nameZh: '😀'.repeat(40),
-    fulfillment: 'post' as const,
-    deliverableDistrictNamesZh: ['', '😀'.repeat(40)],
+    fulfillment: 'local' as const,
+    deliverableZoneNamesZh: ['乙', '😀'.repeat(20), ''],
   }
   const summary = { ...fixture(), cities: [city, { ...city, nameZh: '' }] }
   expect(parseSummary(summary)).toEqual(summary)
 })
 
 /** 复制层级避免View通过解析结果修改原始响应。 / Copy nested objects so rendering cannot mutate the transport response. */
-it('返回独立对象与区域数组', function testCopy() {
+it('返回独立对象与大区数组', function testCopy() {
   const input = fixture()
   const result = parseSummary(input)
   result.cities[0]!.nameZh = '修改后的名称'
-  result.cities[0]!.deliverableDistrictNamesZh.push('修改后的区域')
+  result.cities[0]!.deliverableZoneNamesZh.push('修改后的大区')
   expect(input.cities[0]!.nameZh).toBe('虚构线下演示城市')
-  expect(input.cities[0]!.deliverableDistrictNamesZh).toHaveLength(2)
+  expect(input.cities[0]!.deliverableZoneNamesZh).toHaveLength(2)
 })
 
 /** 授权失败保留错误语义，401通知登录适配器。 / Preserve authorization errors and notify the session adapter only for 401. */

@@ -87,16 +87,18 @@ onMounted(load)
         <ElEmpty v-if="summary.cities.length === 0" description="暂无城市配送概况" />
         <section aria-labelledby="local-heading">
           <h3 id="local-heading">{{ DASHBOARD_FULFILLMENT.local }}</h3>
-          <p>配送费 {{ formatMoney(summary.localFeeCents) }}；线下配送没有包邮。</p>
+          <p>
+            全店默认线下配送费 {{ formatMoney(summary.localFeeCents) }}，配送大区可单独设置运费。
+          </p>
           <p v-if="localCities.length === 0">暂无线下配送城市</p>
           <ul v-else>
             <li v-for="(city, index) in localCities" :key="`${city.id}:${index}`">
               <strong>{{ city.nameZh }}</strong
               >：
-              <template v-if="city.deliverableDistrictNamesZh.length"
-                >可送 {{ city.deliverableDistrictNamesZh.join('、') }}</template
+              <template v-if="city.deliverableZoneNamesZh.length"
+                >可送大区 {{ city.deliverableZoneNamesZh.join('、') }}</template
               >
-              <template v-else>暂无可送区域</template>
+              <template v-else>暂无可送配送大区</template>
             </li>
           </ul>
         </section>

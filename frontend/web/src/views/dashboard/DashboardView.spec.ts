@@ -74,13 +74,12 @@ it('renders workload and delivery scopes and emits filtered navigation only', as
   expect(wrapper.emitted('openReports')).toEqual([['open']])
   expect(wrapper.emitted('openDelivery')).toEqual([[]])
   expect(get).toHaveBeenCalledTimes(1)
-  expect(wrapper.text()).toContain('A$ 6.00')
+  expect(wrapper.text()).toContain('全店默认线下配送费 A$ 6.00，配送大区可单独设置运费')
   expect(wrapper.text()).toContain('A$ 8.00')
   expect(wrapper.text()).toContain('商品金额满 A$ 50.00 包邮，仅适用于快递')
-  expect(wrapper.text()).toContain('线下配送没有包邮')
-  expect(wrapper.text()).toContain('演示线下城市： 可送 演示可送区')
+  expect(wrapper.text()).toContain('演示线下城市： 可送大区 演示可送大区')
   expect(wrapper.text()).toContain('演示快递城市')
-  expect(wrapper.text()).not.toContain('快递区域不应展示')
+  expect(wrapper.text()).not.toContain('暂无可送配送大区')
   expect(
     wrapper
       .findAll('button')
@@ -181,20 +180,20 @@ it('escapes names and shows an explicit local area gap', async function testEsca
           id: '1',
           nameZh: '<img src=x onerror=alert(1)>',
           fulfillment: 'local',
-          deliverableDistrictNamesZh: [],
+          deliverableZoneNamesZh: [],
         },
         {
           id: '2',
           nameZh: '另一个城市',
           fulfillment: 'local',
-          deliverableDistrictNamesZh: ['<script>alert(1)</script>'],
+          deliverableZoneNamesZh: ['<script>alert(1)</script>'],
         },
       ],
     }),
   )
   const wrapper = render()
   await flushPromises()
-  expect(wrapper.text()).toContain('暂无可送区域')
+  expect(wrapper.text()).toContain('暂无可送配送大区')
   expect(wrapper.text()).toContain('<img src=x onerror=alert(1)>')
   expect(wrapper.text()).toContain('<script>alert(1)</script>')
   expect(wrapper.find('img').exists()).toBe(false)

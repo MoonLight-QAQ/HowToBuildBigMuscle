@@ -1,14 +1,52 @@
 import { http, HttpResponse, type HttpHandler, type HttpResponseResolver } from 'msw/http'
 import type { components } from '@/api/generated/admin'
 import { ERROR_CODE } from '@/constants/error-code'
-import { createDashboardData, type DashboardMockData } from '../data/dashboard'
+import {
+  createDashboardData,
+  type DashboardMockCity,
+  type DashboardMockData,
+  type DashboardMockZone,
+} from '../data/dashboard'
 
 export const DASHBOARD_MOCK_TOKENS = {
   reader: 'mock-dashboard-reader',
   denied: 'mock-dashboard-denied',
 } as const
 
-/** 按当前记录统计待办，复制配送快照；不按日期筛选，不写订单或退款。 / Count current records and copy delivery snapshots without date filtering or business writes. */
+/** 判断大区是否至少有一个最终可送成员，空成员返回false。 / Check whether at least one member is deliverable, returning false for an empty zone. */
+function hasDeliverableMember(zone: DashboardMockZone): boolean {
+  return zone.members.some(
+    /** 成员设置优先，null时使用大区默认。 / Prefer the member override and use the zone default for null. */
+    function isDeliverable(member) {
+      return member.deliverableOverride ?? zone.deliverable
+    },
+  )
+}
+
+/** 按大区sort升序比较，返回排序所需的差值。 / Compare zones by ascending sort order. */
+function compareZoneSort(first: DashboardMockZone, second: DashboardMockZone): number {
+  return first.sort - second.sort
+}
+
+/** 读取大区中文名供摘要投影，无副作用。 / Read a zone's Chinese name for the summary without effects. */
+function zoneName(zone: DashboardMockZone): string {
+  return zone.nameZh
+}
+
+/** 按最终可送成员投影线下大区，快递城市的摘要大区列表为空。 / Project local zones with deliverable members and an empty summary list for post cities. */
+function projectCity(city: DashboardMockCity): components['schemas']['CityOverview'] {
+  return {
+    id: city.id,
+    nameZh: city.nameZh,
+    fulfillment: city.fulfillment,
+    deliverableZoneNamesZh:
+      city.fulfillment === 'local'
+        ? city.zones.filter(hasDeliverableMember).sort(compareZoneSort).map(zoneName)
+        : [],
+  }
+}
+
+/** 按当前记录统计待办并汇总配送大区，返回只读响应投影。 / Count current workload and aggregate delivery zones into a read-only response. */
 function readSummary(source: DashboardMockData): components['schemas']['Summary'] {
   let pendingOrderCount = 0
   let deliveringOrderCount = 0
@@ -24,12 +62,16 @@ function readSummary(source: DashboardMockData): components['schemas']['Summary'
   for (const report of source.reports) {
     if (report.status === 'open') openReportCount += 1
   }
+  const { cities, localFeeCents, postFeeCents, freeShippingThresholdCents } = source.delivery
   return {
     pendingOrderCount,
     deliveringOrderCount,
     openRefundCount,
     openReportCount,
-    ...structuredClone(source.delivery),
+    cities: cities.map(projectCity),
+    localFeeCents,
+    postFeeCents,
+    freeShippingThresholdCents,
   }
 }
 

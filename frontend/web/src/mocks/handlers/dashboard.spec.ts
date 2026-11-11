@@ -46,15 +46,50 @@ beforeEach(reset)
 afterEach(cleanup)
 afterAll(close)
 
-/** 默认数据展示真实待办及两种配送概况。 / The default source provides current work and both fulfillment modes. */
-it('四项计数按服务端状态得出，配送快照原样返回', async function testDefaultSummary() {
+/** 验证待办与大区投影，覆盖成员开关、空成员、排序和快递空数组。 / Verify workload and zone projections with member overrides, empty memberships, sort order and empty post lists. */
+it('按记录统计待办并返回按最终可送成员汇总的大区', async function testDefaultSummary() {
   expect(await readSummary()).toEqual({
     pendingOrderCount: 2,
     deliveringOrderCount: 1,
     openRefundCount: 2,
     openReportCount: 2,
-    ...source.delivery,
+    cities: [
+      {
+        id: '9000000000000000040',
+        nameZh: '虚构线下演示城市',
+        fulfillment: 'local',
+        deliverableZoneNamesZh: ['虚构可送大区甲', '虚构可送大区乙'],
+      },
+      {
+        id: '9000000000000000041',
+        nameZh: '虚构快递演示城市',
+        fulfillment: 'post',
+        deliverableZoneNamesZh: [],
+      },
+      {
+        id: '9000000000000000042',
+        nameZh: '虚构暂无可送大区城市',
+        fulfillment: 'local',
+        deliverableZoneNamesZh: [],
+      },
+    ],
+    localFeeCents: 600,
+    postFeeCents: 1000,
+    freeShippingThresholdCents: 10000,
   })
+})
+
+/** 清除成员覆盖或修改大区排序后，下一次GET按最新配置投影。 / Recompute membership and sort order on the next GET after configuration changes. */
+it('成员覆盖和大区排序变更后重新汇总', async function testCurrentZones() {
+  const initial = await readSummary()
+  expect(initial.cities[0]!.deliverableZoneNamesZh).toEqual(['虚构可送大区甲', '虚构可送大区乙'])
+  const [enabledByMember, disabledByMembers] = source.delivery.cities[0]!.zones
+  enabledByMember!.members[0]!.deliverableOverride = null
+  disabledByMembers!.members[1]!.deliverableOverride = true
+  disabledByMembers!.sort = 5
+  const updated = await readSummary()
+  expect(updated.cities[0]!.deliverableZoneNamesZh).toEqual(['虚构成员停送大区', '虚构可送大区甲'])
+  expect(updated.cities[1]!.deliverableZoneNamesZh).toEqual([])
 })
 
 /** 每次GET重新统计当前记录与配置，不缓存初始计数。 / Recompute records and configuration on each GET instead of caching initial counts. */
@@ -128,11 +163,12 @@ it('无记录和城市时返回真实零值', async function testEmptySource() {
 /** 读取不修改来源，响应对象也不能反向影响下一次响应。 / Reads preserve the source and response mutations cannot affect subsequent reads. */
 it('响应与来源隔离，GET不会修改业务记录', async function testReadOnlyIsolation() {
   const before = structuredClone(source)
+  const initial = await readSummary()
   const result = await readSummary()
   result.cities[0]!.nameZh = '修改结果'
-  result.cities[0]!.deliverableDistrictNamesZh.push('新增结果区域')
+  result.cities[0]!.deliverableZoneNamesZh.push('新增结果大区')
   expect(source).toEqual(before)
-  expect(await readSummary()).toMatchObject({ cities: before.delivery.cities })
+  expect(await readSummary()).toEqual(initial)
 })
 
 /** 工厂为每个测试或宿主提供独立默认记录。 / The factory creates independent default records per test or host. */
@@ -140,9 +176,9 @@ it('两份默认数据不共享嵌套数组', function testFactoryIsolation() {
   const first = createDashboardData()
   const second = createDashboardData()
   first.orders[0]!.status = 'done'
-  first.delivery.cities[0]!.deliverableDistrictNamesZh.push('测试修改')
+  first.delivery.cities[0]!.zones[0]!.members[0]!.deliverableOverride = false
   expect(second.orders[0]!.status).toBe('pending')
-  expect(second.delivery.cities[0]!.deliverableDistrictNamesZh).toHaveLength(2)
+  expect(second.delivery.cities[0]!.zones[0]!.members[0]!.deliverableOverride).toBe(true)
 })
 
 /** 非法或无权限合成身份在读取摘要前被拒绝，不泄露数据。 / Reject invalid or forbidden identities before reading summary data. */
