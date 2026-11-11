@@ -11,6 +11,7 @@
 | 0003 | [契约先行，前端用模拟数据开发](0003-contract-first.md) | 已采纳 |
 | 0004 | [Realnin 管理端范围重置与契约基线](0004-restart-admin-scope.md) | 已采纳 |
 | 0005 | [配送大区与 suburb 字典](0005-delivery-zone-and-suburb.md) | 已采纳 |
+| 0006 | [管理端鉴权改用 httpOnly cookie](0006-admin-auth-cookie.md) | 已采纳 |
 
 ## 什么时候写
 
