@@ -642,6 +642,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 商品列表
+         * @description 分页返回商品，按 createdAt 从新到旧排序。每一行带账面、锁定、可售，都由服务器计算，前端不要用账面减锁定。
+         *     - categoryId：按商城类目筛选，不传时返回全部类目。
+         *     - displayStatus：按显示状态筛选（在售 / 缺货 / 已下架），不传时返回全部。
+         *     - keyword：同时匹配中文名和英文名，不区分大小写的包含匹配。不传时不按关键字过滤。
+         *     - 多个条件同时传时，取交集。
+         */
+        get: operations["listProducts"];
+        put?: never;
+        /**
+         * 新增商品
+         * @description - categoryId 只能选**未删除的商城类目**，类目不存在或已删除时返回 VALIDATION_FAILED。
+         *     - priceCents 必须大于 0。页面上按元输入，最多两位小数，提交前转换为分。
+         *     - stock 是账面库存，≥ 0 的整数。新商品的锁定量为 0，所以可售等于账面。
+         *     - baseLikes 是 ≥ 0 的整数，不是整数或为负数时返回 VALIDATION_FAILED。
+         *     - images 1～9 张，第一张是主图。key 必须来自 presignUpload（用途为 product）的返回，宽高由前端读取。
+         *     - 库存为 0 也可以上架，小程序显示缺货。
+         *     - 新商品的 version 为 0，销量为 0，点赞数等于基础点赞。
+         *     - 商品没有规格和评价。
+         */
+        post: operations["createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 查看商品
+         * @description 编辑页使用。返回商品的全部字段，以及当前的锁定和可售，用于在编辑页展示「有几件被待支付订单占用」。
+         *     返回的 version 在修改时原样提交。
+         */
+        get: operations["getProduct"];
+        /**
+         * 修改商品
+         * @description 请求中带全部可编辑字段和读取到的 version。字段规则与 createProduct 相同。
+         *
+         *     **入库：** 不单独提供入库接口。编辑页的「入库」由前端在当前账面上加一个正整数，
+         *     算出新的 stock 后随本接口一起提交；点保存才生效。直接改账面也是改 stock。
+         *
+         *     **乐观锁：**
+         *     - 提交 getProduct 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+         *     - 版本不一致（其他店员在此期间保存过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+         *       「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+         *     - 写入成功后 version 加 1，返回最新的商品。
+         *     - 只有本接口的写入会增加 version。小程序下单、支付、超时取消引起的**锁定量变化不增加 version**，
+         *       销量和用户点赞的变化也不增加，否则店员编辑期间每有一笔订单都会冲突。
+         *
+         *     **库存校验：**
+         *     - stock 是 ≥ 0 的整数。
+         *     - 服务器在写入时取**当时**的锁定量比较，不以前端看到的 lockedQty 为准。stock 小于锁定量时返回
+         *       STOCK_BELOW_LOCKED，账面不变；message 和 details 写明锁定的件数，如「账面库存不能小于已锁定的 3 件」。
+         *     - 先检查 version，再检查库存：version 过期时只返回 VERSION_CONFLICT。
+         *
+         *     **其他：**
+         *     - categoryId 必须是未删除的商城类目。原类目已删除时，需要改选一个类目，否则返回 VALIDATION_FAILED。
+         *     - 修改价格只影响新订单，已有订单使用下单时的价格。
+         *     - 修改 baseLikes 不删除用户已有的点赞，likeCount 随之变化。
+         *     - 取消上架后，小程序的列表、搜索、详情购买都不可用；已有订单不受影响。
+         */
+        put: operations["updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1820,6 +1906,186 @@ export interface components {
             nameEn: string;
             /** @description 排序，越小越靠前 */
             sort: number;
+        };
+        /**
+         * @description 商品显示状态，由服务器计算
+         *     - on_sale：在售。已上架，且可售数大于 0
+         *     - out_of_stock：缺货。已上架，但可售数为 0
+         *     - off_shelf：已下架。店员取消了上架
+         * @enum {string}
+         */
+        ProductDisplayStatus: "on_sale" | "out_of_stock" | "off_shelf";
+        /**
+         * @description 商品。没有规格和评价。列表和详情使用同一个结构
+         * @example {
+         *       "id": "1854239876543209560",
+         *       "categoryId": "1854239876543209540",
+         *       "categoryNameZh": "日用百货",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 20,
+         *       "lockedQty": 3,
+         *       "sellableQty": 17,
+         *       "salesCount": 58,
+         *       "baseLikes": 30,
+         *       "likeCount": 42,
+         *       "onShelf": true,
+         *       "displayStatus": "on_sale",
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "url": "https://cdn.example.com/prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ],
+         *       "version": 2,
+         *       "createdAt": "2026-11-01T03:30:00Z",
+         *       "updatedAt": "2026-11-03T05:00:00Z"
+         *     }
+         */
+        Product: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            /** @description 类目中文名，列表展示用。类目已删除时照常返回原名称 */
+            readonly categoryNameZh: string;
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 账面库存，货架上的件数。不能小于 lockedQty */
+            stock: number;
+            /** @description 锁定：所有待支付订单占用的件数之和 */
+            readonly lockedQty: number;
+            /** @description 可售 = 账面 − 锁定，由服务器计算 */
+            readonly sellableQty: number;
+            /** @description 销量 */
+            readonly salesCount: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            /** @description 展示的点赞数 = 基础点赞 + 用户点赞人数 */
+            readonly likeCount: number;
+            /** @description 是否上架 */
+            onShelf: boolean;
+            readonly displayStatus: components["schemas"]["ProductDisplayStatus"];
+            /** @description 简介 */
+            summaryZh: string;
+            /** @description 简介 */
+            summaryEn: string;
+            /** @description 详情 */
+            detailZh: string;
+            /** @description 详情 */
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["Image"][];
+            readonly version: components["schemas"]["Version"];
+            readonly createdAt: components["schemas"]["DateTime"];
+            readonly updatedAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 新增商品的请求体
+         * @example {
+         *       "categoryId": "1854239876543209540",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 20,
+         *       "baseLikes": 30,
+         *       "onShelf": true,
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ]
+         *     }
+         */
+        ProductCreateInput: {
+            /** @description 未删除的商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 账面库存 */
+            stock: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            onShelf: boolean;
+            summaryZh: string;
+            summaryEn: string;
+            detailZh: string;
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["ImageInput"][];
+        };
+        /**
+         * @description 修改商品的请求体。字段与 ProductCreateInput 相同，另加 version。入库也通过这里提交新的 stock
+         * @example {
+         *       "categoryId": "1854239876543209540",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 30,
+         *       "baseLikes": 30,
+         *       "onShelf": true,
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ],
+         *       "version": 2
+         *     }
+         */
+        ProductUpdateInput: {
+            /** @description 未删除的商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 新的账面库存。入库时为当前账面加入库数。不能小于写入时的锁定量 */
+            stock: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            onShelf: boolean;
+            summaryZh: string;
+            summaryEn: string;
+            detailZh: string;
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["ImageInput"][];
+            /** @description 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT */
+            version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 商品列表的分页
+         * @example {
+         *       "items": [],
+         *       "total": 0,
+         *       "page": 1,
+         *       "pageSize": 20
+         *     }
+         */
+        ProductPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Product"][];
         };
         /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
         Admin: {
@@ -3221,6 +3487,147 @@ export interface operations {
             /** @description NOT_FOUND（类目不存在或已删除） */
             404: components["responses"]["NotFound"];
             /** @description CATEGORY_IN_USE（类目下还有已上架的商品） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                /** @description 每页条数 */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description 商城类目 ID，不传时返回全部类目 */
+                categoryId?: components["schemas"]["Id"];
+                /** @description 显示状态，不传时返回全部 */
+                displayStatus?: components["schemas"]["ProductDisplayStatus"];
+                /** @description 同时匹配 nameZh 和 nameEn */
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["ProductPage"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（分页参数不合法、categoryId 格式不对、displayStatus 不是有效的状态、keyword 为空或超长） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的商品 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（必填字段缺失、超长；priceCents 不大于 0；stock 或 baseLikes 为负数或不是整数；图片为 0 张或超过 9 张、key 不是上传接口发出的；类目不存在或已删除；出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（商品不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的商品 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（字段规则与 createProduct 相同；另外 version 缺失时也返回） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description NOT_FOUND（商品不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description VERSION_CONFLICT（提交的 version 已过期，商品已被他人修改。重新读取，不要盲目重试）；STOCK_BELOW_LOCKED（账面库存小于写入时的锁定量，如 message「账面库存不能小于已锁定的 3 件」，details 为 [{ field：stock，message：不能小于 3 }]） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
