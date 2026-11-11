@@ -13,6 +13,14 @@ export const ERROR_CODE = {
   CATEGORY_IN_USE: { code: 'CATEGORY_IN_USE', message: '类目仍在使用，无法删除' },
   STOCK_BELOW_LOCKED: { code: 'STOCK_BELOW_LOCKED', message: '账面库存不能小于已锁定的件数' },
   LAST_SLOT: { code: 'LAST_SLOT', message: '至少需要保留一个送达时段' },
+  SUBURB_IN_OTHER_ZONE: {
+    code: 'SUBURB_IN_OTHER_ZONE',
+    message: '该 suburb 已属于其他配送大区，请先移出',
+  },
+  SUBURB_STATE_MISMATCH: {
+    code: 'SUBURB_STATE_MISMATCH',
+    message: 'suburb 所在的州与城市所属的州不一致',
+  },
   LISTING_NOT_ON_SALE: { code: 'LISTING_NOT_ON_SALE', message: '帖子已不是在售状态，请刷新后重试' },
   // 仅预留渠道接入错误，不决定退款审核状态。 / Reserved; never changes refund review state.
   REFUND_PAYOUT_FAILED: {
