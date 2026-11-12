@@ -7,7 +7,7 @@ import {
 } from '@/constants/error-code'
 import type { AuthAdapter, ErrorKind, FieldError, HttpOptions, RequestOptions } from '@/types/http'
 
-/** 只保留可交给页面的错误，不保留 token、请求对象或原始响应。 / Safe UI error without request secrets. */
+/** 只保留可交给页面的错误，不保留请求对象或原始响应。 / Safe UI error without request secrets. */
 export class ApiError extends Error {
   readonly kind: ErrorKind
   readonly code: string | null
@@ -69,7 +69,7 @@ function inspectEveryStatus(): boolean {
   return true
 }
 
-/** 默认失效处理仅跳转；登录状态稍后由 W-01c 接入。 / Default navigation until W-01c installs its adapter.
+/** 未接入登录适配器时的默认失效处理：仅跳转。 / Default navigation when no adapter is installed.
  * 参数/Params: 无。返回/Returns: void；浏览器中可能导航 / May navigate the browser to login.
  */
 function navigateToLogin(): void {
@@ -82,11 +82,12 @@ function navigateToLogin(): void {
 export class HttpClient {
   private readonly client
   private auth: AuthAdapter | null
-  private invalidToken: string | null | undefined
+  /** 已通知过 NEED_LOGIN 的会话代次；未接入适配器时记为 null。 / Generation already notified; null without adapter. */
+  private notifiedGeneration: number | null | undefined
 
   /** 创建独立客户端。 / Create an isolated client.
    * 参数/Params: API前缀、超时毫秒及登录适配器 / API base, timeout in ms, session adapter.
-   * 返回/Returns: 客户端；不发请求、不存储token / Client; no requests or token persistence.
+   * 返回/Returns: 客户端；不发请求。通行证在 httpOnly cookie 中，同域请求由浏览器自动携带 / Client; cookie sent by the browser.
    */
   constructor(options: HttpOptions = {}) {
     this.auth = options.auth ?? null
@@ -106,15 +107,15 @@ export class HttpClient {
    */
   setAuth(auth: AuthAdapter | null): void {
     this.auth = auth
-    this.invalidToken = undefined
+    this.notifiedGeneration = undefined
   }
 
   /** 请求并校验包装、解析data；失败抛ApiError，不重试写入。 / Request, unwrap and parse data; never auto-retry.
    * 参数/Params: 相对资源路径、方法/参数/取消信号和解析器 / Relative path, request options and parser.
-   * 返回/Returns: 已验证数据。副作用/Effects: 网络请求；有效会话失效时通知登录适配器 / Network and expiry notification.
+   * 返回/Returns: 已验证数据。副作用/Effects: 网络请求；会话失效或须改密码时通知登录适配器 / Network and session notifications.
    */
   async request<T>(path: string, options: RequestOptions<T>): Promise<T> {
-    // 限定资源路径，避免Bearer被发送到任意地址。 / Keep bearer credentials within the configured API.
+    // 限定资源路径，请求只发往配置的接口前缀。 / Keep requests within the configured API prefix.
     if (!/^\/(?!\/)/.test(path) || /[\\?#]/.test(path)) throw new ApiError('protocol')
     try {
       for (const segment of path.split('/')) {
@@ -129,9 +130,11 @@ export class HttpClient {
       throw new ApiError('protocol')
     }
     const auth = this.auth
-    let token: string | null
+    // 记下发请求时的会话代次，收到 NEED_LOGIN、PASSWORD_CHANGE_REQUIRED 时据此判断是否属于当前会话。
+    // Snapshot the session generation to ignore late responses from an earlier session.
+    let generation: number | null
     try {
-      token = options.anonymous ? null : (auth?.getToken() ?? null)
+      generation = options.anonymous ? null : (auth?.getSessionGeneration() ?? null)
     } catch {
       throw new ApiError('protocol')
     }
@@ -142,7 +145,6 @@ export class HttpClient {
         params: options.params,
         data: options.data,
         signal: options.signal,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       const body = response.data
       const contentType = response.headers['content-type']
@@ -165,8 +167,11 @@ export class HttpClient {
         ) {
           throw new ApiError('protocol', response.status)
         }
-        if (body.code === ERROR_CODE.NEED_LOGIN.code && !options.anonymous)
-          await this.notifyExpired(auth, token)
+        if (!options.anonymous) {
+          if (body.code === ERROR_CODE.NEED_LOGIN.code) await this.notifyExpired(auth, generation)
+          else if (body.code === ERROR_CODE.PASSWORD_CHANGE_REQUIRED.code)
+            await this.notifyPasswordChangeRequired(auth, generation)
+        }
         throw new ApiError(
           'business',
           response.status,
@@ -207,19 +212,42 @@ export class HttpClient {
     }
   }
 
-  /** 仅通知仍有效的同一会话，并去重并发失效响应。 / Notify once for the same current session.
-   * 参数/Params: 请求时的适配器与token快照 / Adapter and token captured at dispatch.
+  /** 仅通知仍是当前会话的失效，并按会话代次去重并发失效响应。 / Notify once per current session generation.
+   * 参数/Params: 请求时的适配器与会话代次快照 / Adapter and generation captured at dispatch.
    * 返回/Returns: void；可能清理登录并导航，适配器失败不掩盖原始业务错误 / Session/navigation effects; preserve API failure.
    */
-  private async notifyExpired(auth: AuthAdapter | null, token: string | null): Promise<void> {
+  private async notifyExpired(auth: AuthAdapter | null, generation: number | null): Promise<void> {
     try {
-      if (auth !== this.auth || (auth?.getToken() ?? null) !== token || this.invalidToken === token)
+      if (
+        auth !== this.auth ||
+        (auth?.getSessionGeneration() ?? null) !== generation ||
+        this.notifiedGeneration === generation
+      )
         return
-      this.invalidToken = token
+      this.notifiedGeneration = generation
       if (auth) await auth.onNeedLogin()
       else navigateToLogin()
     } catch {
       // UI接入失败仍保留NEED_LOGIN，不泄露适配器错误。 / Preserve NEED_LOGIN without exposing adapter errors.
+    }
+  }
+
+  /** 须先改密码时通知适配器跳转；只处理仍是当前会话的响应，未接入适配器时不处理。
+   * Ask the adapter to open the change-password page, only for the current session.
+   * 参数/Params: 请求时的适配器与会话代次快照 / Adapter and generation captured at dispatch.
+   * 返回/Returns: void；可能导航，适配器失败不掩盖原始业务错误 / Navigation effects; preserve API failure.
+   */
+  private async notifyPasswordChangeRequired(
+    auth: AuthAdapter | null,
+    generation: number | null,
+  ): Promise<void> {
+    try {
+      // 请求期间已退出或重新登录时，旧会话的响应不能把新会话标记为须改密码。
+      // A late response from an earlier session must not affect the new one.
+      if (!auth || auth !== this.auth || auth.getSessionGeneration() !== generation) return
+      await auth.onPasswordChangeRequired()
+    } catch {
+      // 同上，保留原始业务错误。 / Preserve the original business error.
     }
   }
 }

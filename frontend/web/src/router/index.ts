@@ -42,8 +42,8 @@ const router = createRouter({
   routes,
 })
 
-// 守卫在每次导航时才读取 store，此时 main.ts 已安装 Pinia
-setupAuthGuard(router, () => useAuthStore().isLoggedIn())
+// 守卫在每次导航时才读取 store，此时 main.ts 已安装 Pinia；登录状态确认（/me 返回）之前不做判断
+setupAuthGuard(router, () => useAuthStore().getSessionState())
 
 router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} - ${APP_TITLE}` : APP_TITLE
