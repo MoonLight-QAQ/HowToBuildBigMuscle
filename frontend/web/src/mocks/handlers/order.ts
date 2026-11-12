@@ -11,14 +11,18 @@ type TransitionInput = components['schemas']['ArriveOrderInput']
 type ResolverInput = Parameters<HttpResponseResolver>[0]
 type Access = 'list' | 'detail' | 'write'
 
-// 只在 Mock 开发/测试中识别的合成 token；不是真实登录凭据，也不接受任意 Bearer 授权。
-// Synthetic Mock-only tokens, never real credentials or a production authorization mechanism.
-export const ORDER_MOCK_TOKENS = {
+// 模拟服务端读取同名 Cookie；以下会话标识仅供订单 Mock 测试。
+// Read the contract cookie on the simulated server using synthetic session IDs only.
+export const ORDER_MOCK_COOKIE = '__Host-pickaus_admin'
+export const ORDER_MOCK_SESSIONS = {
   delivery: 'mock-order-delivery',
   readonly: 'mock-order-readonly',
   deliveryReadonly: 'mock-order-delivery-readonly',
   actionWithoutDelivery: 'mock-order-action-without-delivery',
 } as const
+
+export type OrderMockRole = keyof typeof ORDER_MOCK_SESSIONS
+type ReadOrderMockRole = (cookies: ResolverInput['cookies']) => OrderMockRole | null
 
 const statuses: ReadonlySet<string> = new Set<OrderStatus>([
   'unpaid',
@@ -38,15 +42,25 @@ function fail(error: ErrorDefinition, status: number): Response {
   )
 }
 
-/** 中文：验证合成认证及操作/配送资料权限，失败返回响应，无状态修改。 English: Check Mock authentication and permissions before any state mutation. */
-function authorize(request: Request, access: Access): Response | undefined {
-  const authorization = request.headers.get('authorization')
-  const full = authorization === `Bearer ${ORDER_MOCK_TOKENS.delivery}`
-  const read = authorization === `Bearer ${ORDER_MOCK_TOKENS.readonly}`
-  const detail = authorization === `Bearer ${ORDER_MOCK_TOKENS.deliveryReadonly}`
-  const action = authorization === `Bearer ${ORDER_MOCK_TOKENS.actionWithoutDelivery}`
-  if (!full && !read && !detail && !action) return fail(ERROR_CODE.NEED_LOGIN, 401)
-  if (access === 'list' || full || (access === 'detail' && detail)) return undefined
+/** 中文：按模拟请求 Cookie 解析合成身份；未知会话返回 null，无副作用。 English: Resolve a synthetic role from request cookies, returning null for unknown sessions. */
+function readCookieRole(cookies: ResolverInput['cookies']): OrderMockRole | null {
+  const session = cookies[ORDER_MOCK_COOKIE]
+  for (const role of Object.keys(ORDER_MOCK_SESSIONS) as OrderMockRole[]) {
+    if (ORDER_MOCK_SESSIONS[role] === session) return role
+  }
+  return null
+}
+
+/** 中文：校验订单身份和所需权限；失败返回无订单资料的响应，不修改状态。 English: Check the order role and required access without changing state or disclosing order data on failure. */
+function authorize(role: OrderMockRole | null, access: Access): Response | undefined {
+  if (role === null) return fail(ERROR_CODE.NEED_LOGIN, 401)
+  if (
+    access === 'list' ||
+    role === 'delivery' ||
+    (access === 'detail' && role === 'deliveryReadonly')
+  ) {
+    return undefined
+  }
   return fail(ERROR_CODE.FORBIDDEN, 403)
 }
 
@@ -136,16 +150,19 @@ async function parseTransition(
 }
 
 /**
- * 中文：按可选基础 URL 创建独立订单仓库及四个 handler；写入只影响本次工厂实例。
- * English: Create four handlers with an isolated order store for the optional base URL.
+ * 中文：按基础 URL 和会话解析器创建四个 handler；默认读模拟请求 Cookie，写入只影响本次实例。
+ * English: Create four isolated handlers for a base URL and session resolver, defaulting to Mock request cookies.
  */
-export function createOrderHandlers(baseURL = import.meta.env.VITE_API_BASE_URL): HttpHandler[] {
+export function createOrderHandlers(
+  baseURL = import.meta.env.VITE_API_BASE_URL,
+  readRole: ReadOrderMockRole = readCookieRole,
+): HttpHandler[] {
   const orders = new Map<string, Order>()
   for (const order of createOrderFixtures()) orders.set(order.id, order)
 
   /** 中文：处理分页/状态列表请求；验证权限与参数，返回无隐私投影，不修改数据。 English: Resolve validated list queries with PII-free snapshots. */
-  function listOrders({ request }: ResolverInput): Response {
-    const denied = authorize(request, 'list')
+  function listOrders({ request, cookies }: ResolverInput): Response {
+    const denied = authorize(readRole(cookies), 'list')
     if (denied) return denied
     const url = new URL(request.url)
     const page = parsePage(url.searchParams.get('page'), 1)
@@ -174,7 +191,7 @@ export function createOrderHandlers(baseURL = import.meta.env.VITE_API_BASE_URL)
 
   /** 中文：仅向有配送资料权限的管理员返回详情，失败不返回 data。 English: Return details only after delivery-data authorization. */
   function getOrder(input: ResolverInput): Response {
-    const denied = authorize(input.request, 'detail')
+    const denied = authorize(readRole(input.cookies), 'detail')
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const order = orders.get(input.params.id)
@@ -183,7 +200,7 @@ export function createOrderHandlers(baseURL = import.meta.env.VITE_API_BASE_URL)
 
   /** 中文：原子校验权限、入参、版本和旧状态后变更；失败无写入，成功返回最新详情。 English: Validate then atomically transition; failures never mutate the store. */
   async function transition(input: ResolverInput, startDelivery: boolean): Promise<Response> {
-    const denied = authorize(input.request, 'write')
+    const denied = authorize(readRole(input.cookies), 'write')
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const payload = await parseTransition(input.request, startDelivery)
@@ -221,5 +238,3 @@ export function createOrderHandlers(baseURL = import.meta.env.VITE_API_BASE_URL)
     http.post(`${baseURL}/orders/:id/arrive`, arrive),
   ]
 }
-
-export const orderHandlers: HttpHandler[] = createOrderHandlers()

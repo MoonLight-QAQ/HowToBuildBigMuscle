@@ -5,7 +5,7 @@ import { http as mockHttp, HttpResponse, type HttpResponseResolver } from 'msw/h
 import { setupServer } from 'msw/node'
 import { ApiError, http } from './http'
 import { createOrderFixtures } from '@/mocks/data/order'
-import { createOrderHandlers, ORDER_MOCK_TOKENS } from '@/mocks/handlers/order'
+import { createOrderHandlers, type OrderMockRole } from '@/mocks/handlers/order'
 import {
   orderApi,
   parseOrder,
@@ -550,19 +550,14 @@ it('拒绝路径注入、空筛选、分页越界及伪造写字段', async func
   expect(requests).toBe(0)
 })
 
-/** 中文：为交叉测试安装真实模块 Mock 与合成认证，修改测试客户端，不持久化凭据。 English: Installs real module handlers and synthetic authentication in the test client without credential persistence. */
+/** 中文：返回隔离交叉测试的配送身份；不向请求加鉴权头。 English: Supply the test delivery role without adding authentication headers. */
+function readTestOrderRole(): OrderMockRole {
+  return 'delivery'
+}
+
+/** 中文：安装真实订单 handler 和隔离测试会话。 English: Install the real order handlers with an isolated test session. */
 function installOrderMock(): void {
-  server.use(...createOrderHandlers(baseURL))
-  http.setAuth({
-    /** 中文：返回 Mock 专用合成 token，无参数且无副作用。 English: Returns the synthetic Mock-only token without input or effects. */
-    getToken(): string {
-      return ORDER_MOCK_TOKENS.delivery
-    },
-    /** 中文：若交叉测试意外失去认证则使测试失败，无返回值。 English: Fails if integration unexpectedly loses authentication; returns nothing. */
-    onNeedLogin(): never {
-      throw new Error('unexpected-mock-auth-expiry')
-    },
-  })
+  server.use(...createOrderHandlers(baseURL, readTestOrderRole))
 }
 
 /** 中文：用真实 API/HttpClient/默认 Mock 验证全部 15 个订单均能解析，不依赖自行简化的响应。 English: Exercises real API/HttpClient/default Mock for all 15 order snapshots without simplified responses. */

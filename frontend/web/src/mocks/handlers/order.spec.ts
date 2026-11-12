@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest'
 import { setupServer } from 'msw/node'
 import type { components } from '@/api/generated/admin'
 import { createOrderFixtures } from '@/mocks/data/order'
-import { createOrderHandlers, ORDER_MOCK_TOKENS } from './order'
+import { createOrderHandlers, ORDER_MOCK_COOKIE, ORDER_MOCK_SESSIONS } from './order'
 
 type Order = components['schemas']['Order']
 type OrderPage = components['schemas']['OrderPage']
@@ -55,14 +55,14 @@ function findOrder(status: OrderStatus): Order {
   throw new Error('missing-order-fixture')
 }
 
-/** 中文：发送带合成 token 的测试请求；有 body 时 POST，否则 GET，不访问真实服务。 English: Send intercepted GET/POST requests with optional synthetic authentication. */
+/** 中文：发送带合成会话 Cookie 的测试请求；有 body 时 POST，否则 GET，不访问真实服务。 English: Send intercepted GET/POST requests with an optional synthetic session cookie. */
 function request(
   path: string,
-  token: string | null = ORDER_MOCK_TOKENS.delivery,
+  session: string | null = ORDER_MOCK_SESSIONS.delivery,
   body?: unknown,
 ): Promise<Response> {
   const headers = new Headers()
-  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  if (session !== null) headers.set('Cookie', `${ORDER_MOCK_COOKIE}=${session}`)
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   return fetch(`${baseURL}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -147,7 +147,7 @@ it('覆盖七种状态、两种履约及三种完成来源，保留金额快照�
 
 /** 中文：验证默认分页与列表字段白名单，低权限管理员不可获取收货隐私。 English: Assert default pagination and an explicit PII-free list projection. */
 it('列表默认分页且没有电话、地址、备注或详情字段', async function testListProjection() {
-  const response = await request('/orders', ORDER_MOCK_TOKENS.readonly)
+  const response = await request('/orders', ORDER_MOCK_SESSIONS.readonly)
   expect(response.status).toBe(200)
   const body = (await response.json()) as { ok: true; data: OrderPage }
   expect(body).toMatchObject({ ok: true, data: { total: fixtures.length, page: 1, pageSize: 20 } })
@@ -236,12 +236,12 @@ it.each([null, 'arbitrary-token', 'customer-token', 'expired-token'])(
 it('详情需要配送资料权限，授权角色可见完整虚构号码', async function testDetailPermissions() {
   const order = findOrder('delivering')
   await assertError(
-    await request(`/orders/${order.id}`, ORDER_MOCK_TOKENS.readonly),
+    await request(`/orders/${order.id}`, ORDER_MOCK_SESSIONS.readonly),
     403,
     'FORBIDDEN',
   )
   const result = await readOrder(
-    await request(`/orders/${order.id}`, ORDER_MOCK_TOKENS.deliveryReadonly),
+    await request(`/orders/${order.id}`, ORDER_MOCK_SESSIONS.deliveryReadonly),
   )
   expect(result).toEqual(order)
   expect(result.contactPhone).toBe('0491 570 006')
@@ -313,9 +313,9 @@ it.each(['pending', 'delivering'] as const)(
 
 /** 中文：所有写入权限先于变更验证，无配送资料或操作权限时状态保持。 English: Require both delivery-data and action permission before either mutation. */
 it.each([
-  ORDER_MOCK_TOKENS.readonly,
-  ORDER_MOCK_TOKENS.deliveryReadonly,
-  ORDER_MOCK_TOKENS.actionWithoutDelivery,
+  ORDER_MOCK_SESSIONS.readonly,
+  ORDER_MOCK_SESSIONS.deliveryReadonly,
+  ORDER_MOCK_SESSIONS.actionWithoutDelivery,
 ])('写入拒绝权限不足的合成角色 %s 且不修改状态', async function testWritePermissions(token) {
   const order = findOrder('pending')
   for (const action of ['start-delivery', 'arrive']) {
@@ -362,7 +362,7 @@ it('拒绝损坏 JSON、错误媒体类型及写入额外参数', async function
   const order = findOrder('pending')
   const path = `${baseURL}/orders/${order.id}/start-delivery`
   const headers = {
-    Authorization: `Bearer ${ORDER_MOCK_TOKENS.delivery}`,
+    Cookie: `${ORDER_MOCK_COOKIE}=${ORDER_MOCK_SESSIONS.delivery}`,
     'Content-Type': 'application/json',
   }
   await assertError(
@@ -472,4 +472,12 @@ it('并发相同版本的写入仅成功一次', async function testConcurrentWr
   expect(codes.sort()).toEqual([200, 409])
   const latest = await readOrder(await request(`/orders/${order.id}`))
   expect(latest).toMatchObject({ status: 'done', completedBy: 'staff', version: 1 })
+})
+
+/** 中文：验证 Bearer 头不再授权订单请求。 English: Verify that a Bearer header no longer authorizes orders. */
+it('只有旧 Bearer 头时返回 NEED_LOGIN', async function testBearerRetired() {
+  const response = await fetch(`${baseURL}/orders`, {
+    headers: { Authorization: `Bearer ${ORDER_MOCK_SESSIONS.delivery}` },
+  })
+  await assertError(response, 401, 'NEED_LOGIN')
 })

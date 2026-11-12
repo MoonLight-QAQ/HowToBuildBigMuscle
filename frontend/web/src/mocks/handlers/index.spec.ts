@@ -32,9 +32,7 @@ describe('MSW handler 汇总', () => {
   // 中文：未注册接口明确返回失败；无输入/输出，不触达实际后端。
   // English: Unregistered requests fail explicitly; no inputs/output, no real backend access.
   it('未注册的管理接口返回符合契约的 500', async () => {
-    const response = await fetch(`${baseURL}/__test__/missing?private=hidden`, {
-      headers: { Authorization: 'Bearer test-only' },
-    })
+    const response = await fetch(`${baseURL}/__test__/missing?private=hidden`)
     const body: components['schemas']['ErrorResponse'] = await response.json()
     expect(response.status).toBe(500)
     expect(body).toEqual({
@@ -42,7 +40,34 @@ describe('MSW handler 汇总', () => {
       code: 'INTERNAL_ERROR',
       message: '模拟接口尚未注册，请检查模块配置',
     })
-    expect(JSON.stringify(body)).not.toMatch(/hidden|test-only|__test__/)
+    expect(JSON.stringify(body)).not.toMatch(/hidden|__test__/)
+  })
+
+  /** 中文：验证统一 Mock 会话同时约束身份查询和订单接口。 English: Verify that the shared Mock session governs /me and orders together. */
+  it('/me 和订单共用会话，退出后都返回 NEED_LOGIN', async function testSharedSession() {
+    const me = await fetch(`${baseURL}/me`)
+    expect(me.status).toBe(200)
+    expect(await me.json()).toMatchObject({
+      ok: true,
+      data: { admin: { mustChangePassword: false } },
+    })
+
+    const orders = await fetch(`${baseURL}/orders`)
+    expect(orders.status).toBe(200)
+    expect(await orders.json()).toMatchObject({ ok: true, data: { total: 15 } })
+
+    const logout = await fetch(`${baseURL}/logout`, { method: 'POST' })
+    expect(await logout.json()).toEqual({ ok: true, data: null })
+
+    const after = await fetch(`${baseURL}/me`)
+    expect(after.status).toBe(401)
+    expect(await after.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+
+    const deniedOrders = await fetch(`${baseURL}/orders`)
+    expect(deniedOrders.status).toBe(401)
+    const denial: unknown = await deniedOrders.json()
+    expect(denial).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    expect(denial).not.toHaveProperty('data')
   })
 
   // 中文：后续模块可优先匹配；无输入/输出，只增加本例测试 handler。
