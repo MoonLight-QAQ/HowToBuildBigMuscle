@@ -161,12 +161,12 @@ describe('useAuthStore', () => {
   })
 
   describe('logout', () => {
-    it('调用 POST /logout 后清除登录状态', async () => {
+    it('POST /logout 成功时返回 ended，并清除登录状态', async () => {
       const request = mockRequest({ '/logout': async () => null })
       const store = useAuthStore()
-      store.setSession(session)
+      store.setSession({ ...session, expiresAt: '2099-01-01T00:00:00Z' })
 
-      await store.logout()
+      await expect(store.logout()).resolves.toBe('ended')
 
       expect(request).toHaveBeenCalledWith(
         '/logout',
@@ -175,13 +175,34 @@ describe('useAuthStore', () => {
       expect(store.isLoggedIn()).toBe(false)
     })
 
-    it('/logout 失败时也清除登录状态，且不抛错', async () => {
+    it('/logout 返回 NEED_LOGIN 时会话本来就已失效，返回 ended 并清除登录状态', async () => {
       mockRequest({ '/logout': () => Promise.reject(needLogin()) })
       const store = useAuthStore()
-      store.setSession(session)
+      store.setSession({ ...session, expiresAt: '2099-01-01T00:00:00Z' })
 
-      await expect(store.logout()).resolves.toBeUndefined()
+      await expect(store.logout()).resolves.toBe('ended')
       expect(store.isLoggedIn()).toBe(false)
+    })
+
+    it.each([
+      ['网络错误', () => new ApiError('network')],
+      ['超时', () => new ApiError('timeout')],
+      ['5xx 业务错误', () => new ApiError('business', 500, 'INTERNAL_ERROR')],
+      ['5xx 非 JSON 响应', () => new ApiError('http', 502)],
+      ['Origin 不符（FORBIDDEN）', () => new ApiError('business', 403, 'FORBIDDEN')],
+      ['数据不符合契约', () => new ApiError('protocol', 200)],
+    ])('/logout %s时返回 unconfirmed，保留登录状态', async (_name, error) => {
+      mockRequest({ '/logout': () => Promise.reject(error()) })
+      const store = useAuthStore()
+      const active: LoginResult = { ...session, expiresAt: '2099-01-01T00:00:00Z' }
+      store.setSession(active)
+      const generation = store.generation
+
+      await expect(store.logout()).resolves.toBe('unconfirmed')
+
+      expect(store.isLoggedIn()).toBe(true)
+      expect(store.admin).toEqual(active.admin)
+      expect(store.generation).toBe(generation)
     })
   })
 

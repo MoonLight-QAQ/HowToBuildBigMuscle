@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { components } from '@/api/generated/admin'
-import { http } from '@/api/http'
+import { http, isErrorCode } from '@/api/http'
+import { ERROR_CODE } from '@/constants/error-code'
 import {
   CHANGE_PASSWORD_PATH,
   isChangePasswordPath,
@@ -13,6 +14,13 @@ import {
 import type { AuthAdapter } from '@/types/http'
 
 type LoginResult = components['schemas']['LoginResult']
+
+/**
+ * 退出登录的结果。
+ * - ended：服务端已确认会话结束（成功，或返回 NEED_LOGIN 表示本来就已失效）
+ * - unconfirmed：不能确认（网络错误、超时、5xx 等），服务端会话可能仍然有效
+ */
+export type LogoutResult = 'ended' | 'unconfirmed'
 
 /**
  * 校验并取出登录状态（/login 和 /me 共用的 LoginResult），不符合契约时抛错。
@@ -119,15 +127,19 @@ export const useAuthStore = defineStore('auth', () => {
     return confirming
   }
 
-  /** 退出登录：调用 /logout，无论成功还是失败都清除本地登录状态 */
-  async function logout(): Promise<void> {
+  /**
+   * 退出登录：调用 /logout，服务端确认会话已结束时才清除本地登录状态。
+   * 结果不能确认时保留登录状态：此时清除本地状态会让用户以为已经退出，
+   * 但 cookie 仍然有效，刷新页面后 /me 又会恢复登录。由调用方提示用户重试。
+   */
+  async function logout(): Promise<LogoutResult> {
     try {
       await postLogout()
-    } catch {
-      // 失败时 cookie 可能还在，但本地状态照样清除，页面回到登录页；cookie 若仍有效，刷新页面后由 /me 恢复
-    } finally {
-      clear()
+    } catch (error) {
+      if (!isErrorCode(error, ERROR_CODE.NEED_LOGIN)) return 'unconfirmed'
     }
+    clear()
+    return 'ended'
   }
 
   /** 收到 PASSWORD_CHANGE_REQUIRED 时，标记当前管理员须先改密码 */

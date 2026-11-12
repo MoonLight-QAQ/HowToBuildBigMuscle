@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { LOGOUT_UNCONFIRMED_MESSAGE } from '@/constants/error-code'
 import { LOGIN_PATH } from '@/router/guard'
 import { useAuthStore } from '@/stores/auth'
 import { findActiveMenuPath, MENU_GROUPS } from './menu'
@@ -9,11 +11,21 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const activeMenuPath = computed(() => findActiveMenuPath(route.path))
+const loggingOut = ref(false)
 
-// 调用 /logout 作废通行证；无论成功还是失败，本地登录状态都已清除，直接跳到登录页
+/**
+ * 调用 /logout 作废通行证。服务端确认会话已结束才跳到登录页；
+ * 结果不能确认时留在当前页并提示，用户可以再点一次「退出登录」重试。
+ */
 async function logout(): Promise<void> {
-  await authStore.logout()
-  await router.replace(LOGIN_PATH)
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    if ((await authStore.logout()) === 'ended') await router.replace(LOGIN_PATH)
+    else ElMessage.error(LOGOUT_UNCONFIRMED_MESSAGE)
+  } finally {
+    loggingOut.value = false
+  }
 }
 </script>
 
@@ -33,7 +45,7 @@ async function logout(): Promise<void> {
     <el-container>
       <el-header class="admin-layout__header">
         <span class="admin-layout__account">{{ authStore.admin?.account }}</span>
-        <el-button link type="primary" @click="logout">退出登录</el-button>
+        <el-button link type="primary" :loading="loggingOut" @click="logout">退出登录</el-button>
       </el-header>
       <el-main class="admin-layout__main">
         <RouterView />
