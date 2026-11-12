@@ -382,7 +382,7 @@ suburb 与配送大区的关联。
 | `detailZh` | string(2000) | 录入 | 详情，必填 |
 | `detailEn` | string(4000) | 录入 | 详情，必填 |
 | `images` | Image[] | 录入 | 1～9 张【建议上限】。第一张是主图 |
-| `version` | int | 计算 | 编辑时原样提交 |
+| `version` | int | 计算 | 编辑时原样提交。后台修改商品和支付成功扣账面都会加 1；只改锁定量、点赞的变化不加 |
 | `createdAt` | datetime | 计算 | |
 | `updatedAt` | datetime | 计算 | |
 
