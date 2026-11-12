@@ -278,7 +278,7 @@ describe('createAuthAdapter', () => {
     const baseURL = `${window.location.origin}/api/admin`
     const server = setupServer()
 
-    beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+    beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
     afterEach(() => server.resetHandlers())
     afterAll(() => server.close())
 
