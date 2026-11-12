@@ -43,8 +43,8 @@ describe('MSW handler 汇总', () => {
     expect(JSON.stringify(body)).not.toMatch(/hidden|__test__/)
   })
 
-  // TODO(W-03)：登录状态的模拟移到 handlers/auth.ts 后，这个用例随之移走。
-  it('/me 返回已登录状态；退出登录后返回 NEED_LOGIN', async () => {
+  /** 中文：验证退款注册使用和 /me 相同的模拟会话。 English: Verify that refunds and /me use the same Mock session. */
+  it('/me 和退款共用会话，退出后都返回 NEED_LOGIN', async function testSharedSession() {
     const me = await fetch(`${baseURL}/me`)
     expect(me.status).toBe(200)
     expect(await me.json()).toMatchObject({
@@ -52,12 +52,22 @@ describe('MSW handler 汇总', () => {
       data: { admin: { mustChangePassword: false } },
     })
 
+    const refunds = await fetch(`${baseURL}/refunds`)
+    expect(refunds.status).toBe(200)
+    expect(await refunds.json()).toMatchObject({ ok: true, data: { total: 12 } })
+
     const logout = await fetch(`${baseURL}/logout`, { method: 'POST' })
     expect(await logout.json()).toEqual({ ok: true, data: null })
 
     const after = await fetch(`${baseURL}/me`)
     expect(after.status).toBe(401)
     expect(await after.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+
+    const denied = await fetch(`${baseURL}/refunds`)
+    expect(denied.status).toBe(401)
+    const body: unknown = await denied.json()
+    expect(body).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    expect(body).not.toHaveProperty('data')
   })
 
   // 中文：后续模块可优先匹配；无输入/输出，只增加本例测试 handler。
