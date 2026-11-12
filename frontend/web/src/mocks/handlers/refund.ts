@@ -16,11 +16,15 @@ type MockResult =
   | { ok: false; code: components['schemas']['ErrorResponse']['code'] }
 
 /** 合成身份只在 Mock 中有效，不是真实凭据。 / Synthetic identities are Mock-only, never real credentials. */
-export const REFUND_MOCK_TOKENS = {
+export const REFUND_MOCK_COOKIE = '__Host-pickaus_admin'
+export const REFUND_MOCK_SESSIONS = {
   reviewer: 'mock-refund-reviewer',
   readonly: 'mock-refund-readonly',
   denied: 'mock-refund-denied',
 } as const
+
+export type RefundMockRole = keyof typeof REFUND_MOCK_SESSIONS
+type ReadRefundMockRole = (cookies: ResolverInput['cookies']) => RefundMockRole | null
 
 /** 仅内存测试适配器事件；可靠终态必须显式确认，不是生产接口。 / In-memory test adapter event, not an API; reliable terminal results require confirmation. */
 export type RefundProviderResult = {
@@ -32,6 +36,7 @@ export type RefundProviderResult = {
 /** 自定义数据仅供测试故障/超占场景；工厂深拷贝，不修改传入值。 / Custom seeds model test failures/overclaims and are cloned by the factory. */
 export type RefundMockOptions = {
   baseURL?: string
+  readRole?: ReadRefundMockRole
   refunds?: readonly Refund[]
   orders?: readonly RefundMockOrder[]
 }
@@ -44,15 +49,20 @@ function fail(error: ErrorDefinition, status: number): Response {
   )
 }
 
-/** 中文：校验合成管理员及审核权限，失败返回错误，不修改数据。 English: Check synthetic administrator/review permissions before mutation. */
-function authorize(request: Request, write = false): Response | undefined {
-  const token = request.headers.get('authorization')
-  if (token === `Bearer ${REFUND_MOCK_TOKENS.reviewer}`) return undefined
-  if (token === `Bearer ${REFUND_MOCK_TOKENS.readonly}`)
-    return write ? fail(ERROR_CODE.FORBIDDEN, 403) : undefined
-  return token === `Bearer ${REFUND_MOCK_TOKENS.denied}`
-    ? fail(ERROR_CODE.FORBIDDEN, 403)
-    : fail(ERROR_CODE.NEED_LOGIN, 401)
+/** 中文：按模拟请求 Cookie 解析合成退款身份，未知会话返回 null。 English: Resolve a synthetic refund role from request cookies or return null. */
+function readCookieRole(cookies: ResolverInput['cookies']): RefundMockRole | null {
+  const session = cookies[REFUND_MOCK_COOKIE]
+  for (const role of Object.keys(REFUND_MOCK_SESSIONS) as RefundMockRole[]) {
+    if (REFUND_MOCK_SESSIONS[role] === session) return role
+  }
+  return null
+}
+
+/** 中文：校验退款读写权限，失败返回无退款资料的响应。 English: Check refund read/write access and return a denial without refund data. */
+function authorize(role: RefundMockRole | null, write = false): Response | undefined {
+  if (role === null) return fail(ERROR_CODE.NEED_LOGIN, 401)
+  if (role === 'reviewer' || (role === 'readonly' && !write)) return undefined
+  return fail(ERROR_CODE.FORBIDDEN, 403)
 }
 
 /** 中文：检查查询白名单及重复字段，返回布尔，无副作用。 English: Check allowed query keys and reject duplicates without effects. */
@@ -142,6 +152,7 @@ function coversRemaining(refund: Refund, order: RefundMockOrder): boolean {
 /** 中文：创建隔离退款仓库、订单账本及测试事件端口；不连接支付服务，不注册控制HTTP接口。 English: Create isolated refund/ledger state and test event ports without payments or control HTTP endpoints. */
 export function createRefundMock(options: RefundMockOptions = {}) {
   const baseURL = options.baseURL ?? import.meta.env.VITE_API_BASE_URL
+  const readRole = options.readRole ?? readCookieRole
   const seeds = structuredClone(options.refunds ?? createRefundFixtures())
   const refunds = new Map<string, Refund>()
   const orders = new Map<string, RefundMockOrder>()
@@ -288,8 +299,8 @@ export function createRefundMock(options: RefundMockOptions = {}) {
   }
 
   /** 中文：分页查询审核状态，不按渠道进度替代审核，不写入。 English: List by review status without substituting provider status or mutating data. */
-  function list({ request }: ResolverInput): Response {
-    const denied = authorize(request)
+  function list({ request, cookies }: ResolverInput): Response {
+    const denied = authorize(readRole(cookies))
     if (denied) return denied
     const url = new URL(request.url)
     const page = parsePage(url.searchParams.get('page'), 1)
@@ -317,7 +328,7 @@ export function createRefundMock(options: RefundMockOptions = {}) {
 
   /** 中文：校验认证/ID后读取退款单，失败不含data。 English: Read a refund after authentication/ID validation; errors contain no data. */
   function get(input: ResolverInput): Response {
-    const denied = authorize(input.request)
+    const denied = authorize(readRole(input.cookies))
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const refund = refunds.get(input.params.id)
@@ -326,7 +337,7 @@ export function createRefundMock(options: RefundMockOptions = {}) {
 
   /** 中文：审核前一次性校验权限/版本/状态及额度，成功记录审核但不增加已退量。 English: Validate authorization/version/state/capacity atomically, then record review without settling quantities. */
   async function review(input: ResolverInput, approve: boolean): Promise<Response> {
-    const denied = authorize(input.request, true)
+    const denied = authorize(readRole(input.cookies), true)
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const payload = await parseReview(input.request)
@@ -384,10 +395,10 @@ export function createRefundMock(options: RefundMockOptions = {}) {
   return { handlers, applyProviderResult, inspectOrder, inspectRefund }
 }
 
-/** 中文：按可选URL创建新隔离仓库的四个handler，无真实支付。 English: Create four handlers with fresh isolated state for an optional URL, without payments. */
-export function createRefundHandlers(baseURL?: string): HttpHandler[] {
-  return createRefundMock({ baseURL }).handlers
+/** 中文：按可选 URL 和会话解析器创建四个隔离 handler，无真实支付。 English: Create four isolated handlers for an optional URL and session resolver, without payments. */
+export function createRefundHandlers(
+  baseURL?: string,
+  readRole?: ReadRefundMockRole,
+): HttpHandler[] {
+  return createRefundMock({ baseURL, readRole }).handlers
 }
-
-export const refundMock = createRefundMock()
-export const refundHandlers = refundMock.handlers

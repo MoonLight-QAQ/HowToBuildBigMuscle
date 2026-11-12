@@ -7,7 +7,12 @@ import {
   createRefundOrderFixtures,
   type RefundMockOrder,
 } from '@/mocks/data/refund'
-import { createRefundMock, REFUND_MOCK_TOKENS, type RefundProviderResult } from './refund'
+import {
+  createRefundMock,
+  REFUND_MOCK_COOKIE,
+  REFUND_MOCK_SESSIONS,
+  type RefundProviderResult,
+} from './refund'
 
 type Refund = components['schemas']['Refund']
 const baseURL = 'http://localhost:48134/api/admin'
@@ -67,11 +72,11 @@ function related(refund: Refund, overrides: Partial<Refund> = {}): Refund {
 /** 中文：发送合成身份的拦截请求，有body时使用POST，无真实后端。 English: Send intercepted synthetic-auth GET/POST requests without a backend. */
 function request(
   path: string,
-  token: string | null = REFUND_MOCK_TOKENS.reviewer,
+  token: string | null = REFUND_MOCK_SESSIONS.reviewer,
   body?: unknown,
 ): Promise<Response> {
   const headers = new Headers()
-  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  if (token !== null) headers.set('Cookie', `${REFUND_MOCK_COOKIE}=${token}`)
   if (body !== undefined) headers.set('Content-Type', 'application/json')
   return fetch(`${baseURL}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -152,7 +157,7 @@ it('覆盖审核三态、渠道五态与两种null语义，快照金额自洽', 
 
 /** 中文：列表分页及审核筛选遵循契约，不用渠道状态筛审核。 English: Follow contract pagination and review filtering, not provider status filtering. */
 it('列表默认分页、详情和审核筛选均保留公开快照', async function testReads() {
-  const response = await request('/refunds', REFUND_MOCK_TOKENS.readonly)
+  const response = await request('/refunds', REFUND_MOCK_SESSIONS.readonly)
   expect(response.status).toBe(200)
   const body = (await response.json()) as { data: components['schemas']['RefundPage'] }
   expect(body.data).toMatchObject({ page: 1, pageSize: 20, total: fixtures.length })
@@ -220,10 +225,10 @@ it('403不修改审核、渠道或订单账本', async function testPermissions(
   const refund = fixture()
   const order = mock.inspectOrder(refund.orderId)
   for (const action of ['approve', 'reject'] as const)
-    await assertError(await review(refund, action, REFUND_MOCK_TOKENS.readonly), 403, 'FORBIDDEN')
-  await assertError(await request('/refunds', REFUND_MOCK_TOKENS.denied), 403, 'FORBIDDEN')
+    await assertError(await review(refund, action, REFUND_MOCK_SESSIONS.readonly), 403, 'FORBIDDEN')
+  await assertError(await request('/refunds', REFUND_MOCK_SESSIONS.denied), 403, 'FORBIDDEN')
   await assertError(
-    await request(`/refunds/${refund.id}`, REFUND_MOCK_TOKENS.denied),
+    await request(`/refunds/${refund.id}`, REFUND_MOCK_SESSIONS.denied),
     403,
     'FORBIDDEN',
   )
@@ -334,7 +339,7 @@ it.each([
 it('拒绝损坏传输和额外查询，过期版本不写入', async function testMalformedTransport() {
   const refund = fixture()
   const headers = {
-    Authorization: `Bearer ${REFUND_MOCK_TOKENS.reviewer}`,
+    Cookie: `${REFUND_MOCK_COOKIE}=${REFUND_MOCK_SESSIONS.reviewer}`,
     'Content-Type': 'application/json',
   }
   await assertError(
@@ -673,4 +678,15 @@ it('测试端口和新工厂不会泄漏可变账本引用', async function test
   await readRefund(await review(refund, 'approve'))
   const fresh = createRefundMock({ baseURL })
   expect(fresh.inspectRefund(refund.id)).toEqual(refund)
+})
+
+/** 中文：只有旧 Bearer 头不能读取退款资料。 English: Verify that a legacy Bearer header cannot read refund data. */
+it('仅携带旧 Bearer 头返回 NEED_LOGIN', async function testBearerRetired() {
+  await assertError(
+    await fetch(`${baseURL}/refunds`, {
+      headers: { Authorization: `Bearer ${REFUND_MOCK_SESSIONS.reviewer}` },
+    }),
+    401,
+    'NEED_LOGIN',
+  )
 })

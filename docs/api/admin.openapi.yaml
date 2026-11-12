@@ -145,6 +145,15 @@
 #
 # 【不需要登录的接口】（只有登录接口）在接口上写 security: []。
 #
+# 【须先改密码】除 /login、/logout、/me、/password 外，需要登录的接口都可能返回
+# PASSWORD_CHANGE_REQUIRED（403），引用 PasswordChangeRequired：
+#
+#   responses:
+#     '403':
+#       $ref: '#/components/responses/PasswordChangeRequired'
+#
+# 接口本身还会返回 FORBIDDEN 等其他 403 时，在 description 中一并写明。
+#
 # 【operationId】camelCase 的「动词 + 名词」，如 listOrders、getOrder、startOrderDelivery。
 
 openapi: 3.1.0
@@ -163,7 +172,7 @@ servers:
     description: 管理端接口前缀
 
 security:
-  - bearerAuth: []
+  - cookieAuth: []
 
 # 所有模块的 tag 在这里统一定义，各区块直接使用，不要新增或修改。
 tags:
@@ -184,7 +193,7 @@ tags:
   - name: product
     description: 商品
   - name: delivery
-    description: 配送（费用、时段、区）
+    description: 配送（费用、时段、配送大区、suburb）
   - name: upload
     description: 图片上传
   # C @celine-hy
@@ -233,8 +242,12 @@ paths:
                         - id: "9000000000000000040"
                           nameZh: 演示城市
                           fulfillment: local
-                          deliverableDistrictNamesZh:
+                          deliverableZoneNamesZh:
                             - 演示区域
+                        - id: "9000000000000000041"
+                          nameZh: 演示快递城市
+                          fulfillment: post
+                          deliverableZoneNamesZh: []
                       localFeeCents: 600
                       postFeeCents: 1000
                       freeShippingThresholdCents: 10000
@@ -369,8 +382,10 @@ paths:
                       address: &a2
                         formatted: 演示地址，请勿配送
                         street: 示例街道
-                        districtNameZh: 演示区域
+                        zoneNameZh: 演示区域
+                        suburb: Example Suburb
                         postcode: "2000"
+                        state: NSW
                       deliveryDate: 2026-11-02
                       slotNameZh: 演示时段
                       remark: null
@@ -1170,6 +1185,1648 @@ paths:
 
   # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
 
+  # ---------- 城市 ----------
+
+  /cities:
+    get:
+      tags: [city]
+      operationId: listCities
+      summary: 城市列表
+      description: |
+        城市名单由商城和闲置共用。数量很少，不分页，按 sort 从小到大排序，sort 相同时按创建时间排序。
+        城市不能删除，所以总是返回全部城市。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 一个线下城市和一个快递城市
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209472'
+                          nameZh: 悉尼
+                          nameEn: Sydney
+                          fulfillment: local
+                          state: NSW
+                          timezone: Australia/Sydney
+                          sort: 1
+                        - id: '1854239876543209473'
+                          nameZh: 堪培拉
+                          nameEn: Canberra
+                          fulfillment: post
+                          state: ACT
+                          timezone: Australia/Sydney
+                          sort: 2
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [city]
+      operationId: createCity
+      summary: 新增城市
+      description: |
+        - 中文名和英文名都必填，都不能与已有城市重复，否则返回 NAME_DUPLICATED。
+          只在未删除的城市中比较（城市目前不能删除，见字段清单）。
+        - fulfillment 不传时默认为 post（快递）。
+        - state 必填，**创建后不能修改**：它决定哪些 suburb 能加入这个城市的配送大区。
+        - timezone 必填，取 IANA 时区名。前端按州预填，由店员确认；服务器不按州推算时区，
+          因为州不能唯一确定时区（见 ADR 0005）。不是有效的 IANA 时区名时返回 VALIDATION_FAILED。
+        - 新城市没有配送大区，地址都会越界。线下和快递城市都需要再建配送大区、加入 suburb。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityCreateInput'
+            examples:
+              current:
+                summary: 新增一个快递城市
+                value:
+                  nameZh: 布里斯班
+                  nameEn: Brisbane
+                  fulfillment: post
+                  state: QLD
+                  timezone: Australia/Brisbane
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的城市
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 新建的城市
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209474'
+                      nameZh: 布里斯班
+                      nameEn: Brisbane
+                      fulfillment: post
+                      state: QLD
+                      timezone: Australia/Brisbane
+                      sort: 3
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有城市重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /cities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [city]
+      operationId: updateCity
+      summary: 修改城市
+      description: |
+        修改城市的名称、配送方式、时区和排序。请求中带全部可编辑字段。
+        - 请求体**不包含 state**，州创建后不能修改：修改州会让已有的配送大区成员与城市的州不一致。
+          请求中出现 state 时返回 VALIDATION_FAILED。确实建错了州，只能新增一个城市。
+        - 名称不能与其他城市重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - 修改配送方式不影响已有的订单和闲置帖子，只影响之后的新订单：
+          改成线下后，按配送大区和成员的可送设置计算；改成快递后，只要求地址属于本市的大区，按快递邮费和包邮门槛计算。
+        - 城市不提供乐观锁（字段清单中城市没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityUpdateInput'
+            examples:
+              current:
+                summary: 把悉尼改成快递
+                value:
+                  nameZh: 悉尼
+                  nameEn: Sydney
+                  fulfillment: post
+                  timezone: Australia/Sydney
+                  sort: 1
+      responses:
+        '200':
+          description: 成功，返回修改后的城市
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/City'
+              examples:
+                current:
+                  summary: 修改后的城市
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209472'
+                      nameZh: 悉尼
+                      nameEn: Sydney
+                      fulfillment: post
+                      state: NSW
+                      timezone: Australia/Sydney
+                      sort: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（城市不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与其他城市重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  # ---------- suburb 与配送大区 ----------
+
+  /suburbs:
+    get:
+      tags: [delivery]
+      operationId: searchSuburbs
+      summary: 搜索 suburb 字典
+      description: |
+        suburb 字典从澳洲官方数据导入，后台**只读**：不提供新增、修改、删除接口。
+        用于往配送大区里添加 suburb 时查找。
+        - keyword：全为数字时按邮编**前缀**匹配（如 `20` 匹配 2000～2099）；否则按名称做不区分大小写的包含匹配。不传时不按关键字过滤。
+        - state：按州筛选，不传时返回所有州。往大区添加时，前端一般传大区所属城市的州。
+        - 按 name、postcode 从小到大排序。
+        - 返回结果不表示 suburb 是否已属于某个大区；加入时由 addZoneSuburbs 校验。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          required: false
+          description: 名称或邮编的关键字。全为数字时按邮编前缀匹配，否则按名称包含匹配
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+        - name: state
+          in: query
+          required: false
+          description: 按州筛选，不传时返回所有州
+          schema:
+            $ref: '#/components/schemas/AustralianState'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SuburbPage'
+              examples:
+                current:
+                  summary: 按邮编前缀 20 搜索 NSW
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209501'
+                          name: Annandale
+                          postcode: '2038'
+                          state: NSW
+                        - id: '1854239876543209500'
+                          name: Leichhardt
+                          postcode: '2040'
+                          state: NSW
+                      total: 2
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 没有匹配的 suburb
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones:
+    get:
+      tags: [delivery]
+      operationId: listDeliveryZones
+      summary: 某个城市的配送大区列表
+      description: |
+        返回一个城市的全部配送大区。数量很少，不分页，按 sort 从小到大排序。
+        - 线下城市和快递城市都有大区：大区圈定城市的服务范围，城市所有大区中的 suburb 就是这个城市的范围。
+        - deliverable、localFeeCents 只对线下订单生效；快递城市的大区只用于圈定范围，这两个字段照常返回，但不起作用。
+        - 大区不能删除，所以总是返回该城市的全部大区。
+      parameters:
+        - name: cityId
+          in: query
+          required: true
+          description: 城市 ID
+          schema:
+            $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 悉尼的两个大区
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209480'
+                          cityId: '1854239876543209472'
+                          nameZh: 内西区
+                          nameEn: Inner West
+                          deliverable: true
+                          localFeeCents: null
+                          sort: 1
+                          suburbCount: 2
+                        - id: '1854239876543209481'
+                          cityId: '1854239876543209472'
+                          nameZh: 帕拉马塔
+                          nameEn: Parramatta
+                          deliverable: false
+                          localFeeCents: 1000
+                          sort: 2
+                          suburbCount: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: createDeliveryZone
+      summary: 新增配送大区
+      description: |
+        - cityId 必填，**创建后不能修改**：修改会让大区成员与新城市的州不一致。城市不存在时返回 VALIDATION_FAILED。
+        - 中文名和英文名在**同一城市内**不能与其他大区重复，否则返回 NAME_DUPLICATED；不同城市可以同名。
+        - deliverable 是大区内 suburb 的默认可送设置；localFeeCents 为 null 时使用全店统一配送费，不为 null 时必须 ≥ 0。两者只对线下订单生效。
+        - 新大区没有成员，suburbCount 为 0，需要再用 addZoneSuburbs 加入 suburb。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryZoneCreateInput'
+            examples:
+              current:
+                summary: 在悉尼新增一个大区
+                value:
+                  cityId: '1854239876543209472'
+                  nameZh: 东区
+                  nameEn: Eastern Suburbs
+                  deliverable: true
+                  localFeeCents: 800
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的大区
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 新建的大区
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209482'
+                      cityId: '1854239876543209472'
+                      nameZh: 东区
+                      nameEn: Eastern Suburbs
+                      deliverable: true
+                      localFeeCents: 800
+                      sort: 3
+                      suburbCount: 0
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [delivery]
+      operationId: updateDeliveryZone
+      summary: 修改配送大区
+      description: |
+        修改大区的名称、默认可送设置、运费和排序。请求中带全部可编辑字段。
+        - 请求体**不包含 cityId**，所属城市创建后不能修改；出现时返回 VALIDATION_FAILED。
+        - 名称在同一城市内不能与其他大区重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - 修改 deliverable 只改变**跟随大区**的成员（deliverableOverride 为 null）；单独设置过的成员不变。
+        - 只影响之后的新订单，已有订单使用下单时的地址和运费快照。
+        - 大区不能删除，不再使用时把其中的 suburb 移出。
+        - 配送大区不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryZoneUpdateInput'
+            examples:
+              current:
+                summary: 帕拉马塔改为可送，使用全店统一配送费
+                value:
+                  nameZh: 帕拉马塔
+                  nameEn: Parramatta
+                  deliverable: true
+                  localFeeCents: null
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回修改后的大区
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryZone'
+              examples:
+                current:
+                  summary: 修改后的大区
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209481'
+                      cityId: '1854239876543209472'
+                      nameZh: 帕拉马塔
+                      nameEn: Parramatta
+                      deliverable: true
+                      localFeeCents: null
+                      sort: 2
+                      suburbCount: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}/suburbs:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [delivery]
+      operationId: listZoneSuburbs
+      summary: 配送大区的成员列表
+      description: |
+        返回大区内的全部 suburb，不分页，按 suburb 的 name、postcode 从小到大排序。
+        - deliverable 是**最终**可送：deliverableOverride 不为 null 时取它，否则取大区的 deliverable。
+        - localFeeCents 是**实际**的线下配送费：大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。
+        - 两个计算字段只对线下订单生效；快递城市的大区照常返回，但不起作用。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ZoneSuburb'
+              examples:
+                current:
+                  summary: 内西区的两个成员，其中一个单独设为不可送
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - suburb:
+                            id: '1854239876543209501'
+                            name: Annandale
+                            postcode: '2038'
+                            state: NSW
+                          deliverableOverride: false
+                          deliverable: false
+                          localFeeCents: 600
+                        - suburb:
+                            id: '1854239876543209500'
+                            name: Leichhardt
+                            postcode: '2040'
+                            state: NSW
+                          deliverableOverride: null
+                          deliverable: true
+                          localFeeCents: 600
+                empty:
+                  summary: 大区还没有成员
+                  value:
+                    ok: true
+                    data:
+                      items: []
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: addZoneSuburbs
+      summary: 往配送大区加入 suburb
+      description: |
+        一次加入一个或多个 suburb，新成员的 deliverableOverride 为 null（跟随大区）。
+
+        **两条校验：**
+        1. 一个 suburb **最多属于一个**配送大区（包括其他城市的大区）。已属于另一个大区时返回 SUBURB_IN_OTHER_ZONE，需要先从原来的大区移出。
+        2. suburb 的 state 必须与大区所属城市的 state 一致，否则返回 SUBURB_STATE_MISMATCH。
+
+        **整批处理规则：**
+        - 整批**原子**处理：任何一个 suburb 不通过校验，整批都不加入。
+        - 出错时 details 列出每个出错的 suburb，field 为 `suburbIds[下标]`，如 `suburbIds[2]`。
+          同时有两种业务错误时，code 取 SUBURB_IN_OTHER_ZONE，details 中逐项写明原因。
+        - 已经在**本大区**的 suburb 直接跳过，不报错，可以重复提交。
+        - suburbIds 中有不存在的 suburb 时返回 VALIDATION_FAILED。
+        - 移出大区后，可以重新加入这个或其他大区。
+
+        只影响之后的新订单。成功后用 listZoneSuburbs 和 listDeliveryZones 重新读取成员和 suburbCount。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddZoneSuburbsInput'
+            examples:
+              current:
+                summary: 加入两个 suburb
+                value:
+                  suburbIds:
+                    - '1854239876543209500'
+                    - '1854239876543209501'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: SUBURB_IN_OTHER_ZONE（有 suburb 已属于另一个配送大区）；SUBURB_STATE_MISMATCH（有 suburb 的州与大区所属城市的州不一致）。details 列出出错的 suburb
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-zones/{id}/suburbs/{suburbId}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - name: suburbId
+        in: path
+        required: true
+        description: suburb 的 ID
+        schema:
+          $ref: '#/components/schemas/Id'
+    put:
+      tags: [delivery]
+      operationId: updateZoneSuburb
+      summary: 单独设置成员是否可送
+      description: |
+        设置一个成员的 deliverableOverride：true 或 false 表示单独设置，null 表示恢复跟随大区。
+        - 只对线下订单生效。
+        - suburb 不在这个大区中时返回 NOT_FOUND。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateZoneSuburbInput'
+            examples:
+              current:
+                summary: 单独设为不可送
+                value:
+                  deliverableOverride: false
+              follow:
+                summary: 恢复跟随大区
+                value:
+                  deliverableOverride: null
+      responses:
+        '200':
+          description: 成功，返回修改后的成员
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ZoneSuburb'
+              examples:
+                current:
+                  summary: 单独设为不可送后
+                  value:
+                    ok: true
+                    data:
+                      suburb:
+                        id: '1854239876543209501'
+                        name: Annandale
+                        postcode: '2038'
+                        state: NSW
+                      deliverableOverride: false
+                      deliverable: false
+                      localFeeCents: 600
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    delete:
+      tags: [delivery]
+      operationId: removeZoneSuburb
+      summary: 把 suburb 移出配送大区
+      description: |
+        只删除 suburb 与大区的**关联**（软删除），不影响字典中的 suburb，也不删除大区。
+        - 移出后，这个 suburb 不再属于该城市的范围：新地址越界，线下也不可送。已有订单使用下单时的快照，不受影响。
+        - 移出后可以重新加入这个或其他大区。
+        - suburb 不在这个大区中时返回 NOT_FOUND。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  # ---------- 配送费用与时段 ----------
+
+  /delivery-fees:
+    get:
+      tags: [delivery]
+      operationId: getDeliveryFees
+      summary: 查看配送费用
+      description: |
+        全店一份配置：线下统一配送费、快递邮费、包邮门槛。
+        - localFeeCents 在配送大区的 localFeeCents 为 null 时使用，只对线下订单生效。线下订单没有包邮。
+        - postFeeCents 和 freeShippingThresholdCents 只对快递订单生效：商品金额达到门槛时邮费为 0。
+        - 返回的 version 在修改时原样提交。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryConfig'
+              examples:
+                current:
+                  summary: 默认配置
+                  value:
+                    ok: true
+                    data:
+                      localFeeCents: 600
+                      postFeeCents: 800
+                      freeShippingThresholdCents: 5000
+                      version: 0
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    put:
+      tags: [delivery]
+      operationId: updateDeliveryFees
+      summary: 修改配送费用
+      description: |
+        请求中带全部三个金额和读取到的 version。三个金额都是 ≥ 0 的整数，单位为分。
+
+        **乐观锁：**
+        - 提交 getDeliveryFees 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+        - 版本不一致（其他人在此期间改过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+          「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+        - 写入成功后 version 加 1，返回最新的配置。
+
+        只影响之后的新订单，已有订单使用下单时的运费快照。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryConfigInput'
+            examples:
+              current:
+                summary: 包邮门槛改为 1 元
+                value:
+                  localFeeCents: 600
+                  postFeeCents: 800
+                  freeShippingThresholdCents: 100
+                  version: 0
+      responses:
+        '200':
+          description: 成功，返回修改后的配置
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryConfig'
+              examples:
+                current:
+                  summary: 修改后，version 加 1
+                  value:
+                    ok: true
+                    data:
+                      localFeeCents: 600
+                      postFeeCents: 800
+                      freeShippingThresholdCents: 100
+                      version: 1
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-slots:
+    get:
+      tags: [delivery]
+      operationId: listDeliverySlots
+      summary: 送达时段列表
+      description: |
+        时段每天共用，不绑定具体日期。返回全部时段，**包括已停用的**；不分页，按 sort 从小到大排序。
+        停用的时段，新的线下订单不能选。快递订单不选时段。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 默认的上午、下午两个时段
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209520'
+                          nameZh: 上午
+                          nameEn: Morning
+                          startTime: '08:00'
+                          endTime: '12:00'
+                          enabled: true
+                          sort: 1
+                        - id: '1854239876543209521'
+                          nameZh: 下午
+                          nameEn: Afternoon
+                          startTime: '12:00'
+                          endTime: '17:00'
+                          enabled: true
+                          sort: 2
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [delivery]
+      operationId: createDeliverySlot
+      summary: 新增送达时段
+      description: |
+        - 中文名和英文名都必填，都不能与已有时段重复，否则返回 NAME_DUPLICATED。
+        - startTime、endTime 为 HH:mm 钟点，endTime 必须晚于 startTime，否则返回 VALIDATION_FAILED。不支持跨午夜的时段。
+        - 钟点按城市当地时间理解。订单上的开始和结束时间点，是下单时用所选日期、这个钟点和城市时区算出的 UTC 时间。
+        - 只影响之后的新订单。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverySlotInput'
+            examples:
+              current:
+                summary: 新增一个晚上时段
+                value:
+                  nameZh: 晚上
+                  nameEn: Evening
+                  startTime: '18:00'
+                  endTime: '20:00'
+                  enabled: true
+                  sort: 3
+      responses:
+        '200':
+          description: 成功，返回新建的时段
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 新建的时段
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209522'
+                      nameZh: 晚上
+                      nameEn: Evening
+                      startTime: '18:00'
+                      endTime: '20:00'
+                      enabled: true
+                      sort: 3
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有时段重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /delivery-slots/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [delivery]
+      operationId: updateDeliverySlot
+      summary: 修改送达时段
+      description: |
+        修改名称、钟点、启用状态和排序。请求中带全部可编辑字段。停用和重新启用也通过本接口修改 enabled。
+        - 名称不能与其他时段重复（不和自己比较），否则返回 NAME_DUPLICATED。
+        - endTime 必须晚于 startTime。
+        - 停用后，新的线下订单不能选这个时段；停用最后一个启用中的时段不拦截（字段清单只规定删除时至少保留一个）。
+        - 只影响之后的新订单。已有订单的时段名称和开始、结束时间点是下单时的快照，不会改变。
+        - 时段不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverySlotInput'
+            examples:
+              current:
+                summary: 停用下午时段
+                value:
+                  nameZh: 下午
+                  nameEn: Afternoon
+                  startTime: '12:00'
+                  endTime: '17:00'
+                  enabled: false
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回修改后的时段
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliverySlot'
+              examples:
+                current:
+                  summary: 停用后的时段
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209521'
+                      nameZh: 下午
+                      nameEn: Afternoon
+                      startTime: '12:00'
+                      endTime: '17:00'
+                      enabled: false
+                      sort: 2
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（时段不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与其他时段重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    delete:
+      tags: [delivery]
+      operationId: deleteDeliverySlot
+      summary: 删除送达时段
+      description: |
+        软删除。已有订单的时段是下单时的快照，不受影响。
+        - 至少要保留一个时段（启用或停用的都算）。删除最后一个时返回 LAST_SLOT。
+        - 删除后名称可以再次使用。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（时段不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: LAST_SLOT（这是最后一个时段，至少要保留一个）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  # ---------- 商城类目 ----------
+
+  /mall-categories:
+    get:
+      tags: [mall-category]
+      operationId: listMallCategories
+      summary: 商城类目列表
+      description: |
+        只给商城用，和闲置类目是两个独立的对象和接口。数量很少，不分页，按 sort 从小到大排序。
+        不返回已删除的类目。
+        inUseCount 是这个类目下**已上架**的商品数（包括缺货的商品），大于 0 时前端禁用删除按钮。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/MallCategory'
+              examples:
+                current:
+                  summary: 两个类目，一个有在售商品
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - id: '1854239876543209540'
+                          nameZh: 日用百货
+                          nameEn: Household
+                          sort: 1
+                          inUseCount: 12
+                        - id: '1854239876543209541'
+                          nameZh: 节日礼品
+                          nameEn: Festive Gifts
+                          sort: 2
+                          inUseCount: 0
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [mall-category]
+      operationId: createMallCategory
+      summary: 新增商城类目
+      description: |
+        - 中文名和英文名都必填，都不能与未删除的商城类目重复，否则返回 NAME_DUPLICATED。
+          只和商城类目比较，不和闲置类目比较；已删除类目的名称可以再次使用。
+        - 类目只能新增和删除，**不能修改**，所以不提供修改接口。
+        - 新类目的 inUseCount 为 0。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MallCategoryInput'
+            examples:
+              current:
+                summary: 新增一个类目
+                value:
+                  nameZh: 节日礼品
+                  nameEn: Festive Gifts
+                  sort: 2
+      responses:
+        '200':
+          description: 成功，返回新建的类目
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MallCategory'
+              examples:
+                current:
+                  summary: 新建的类目
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209541'
+                      nameZh: 节日礼品
+                      nameEn: Festive Gifts
+                      sort: 2
+                      inUseCount: 0
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（名称为空或超长、出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: NAME_DUPLICATED（中文名或英文名与已有商城类目重复）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /mall-categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    delete:
+      tags: [mall-category]
+      operationId: deleteMallCategory
+      summary: 删除商城类目
+      description: |
+        软删除。只删除商城类目，不影响闲置类目。
+        - 这个类目下还有**已上架**的商品（包括缺货的商品，即 inUseCount 大于 0）时，返回 CATEGORY_IN_USE。
+          服务器在删除时重新统计，不以前端看到的 inUseCount 为准。
+        - 只有已下架商品的类目可以删除。删除后，这些商品的 categoryNameZh 照常返回原类目名；
+          再次编辑这些商品时，需要改选一个未删除的类目，否则返回 VALIDATION_FAILED。
+        - 删除后，类目不再出现在列表中，名称可以再次使用。
+      responses:
+        '200':
+          $ref: '#/components/responses/OkNoData'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（类目不存在或已删除）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: CATEGORY_IN_USE（类目下还有已上架的商品）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  # ---------- 商品 ----------
+
+  /products:
+    get:
+      tags: [product]
+      operationId: listProducts
+      summary: 商品列表
+      description: |
+        分页返回商品，按 createdAt 从新到旧排序。每一行带账面、锁定、可售，都由服务器计算，前端不要用账面减锁定。
+        - categoryId：按商城类目筛选，不传时返回全部类目。
+        - displayStatus：按显示状态筛选（在售 / 缺货 / 已下架），不传时返回全部。
+        - keyword：同时匹配中文名和英文名，不区分大小写的包含匹配。不传时不按关键字过滤。
+        - 多个条件同时传时，取交集。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: categoryId
+          in: query
+          required: false
+          description: 商城类目 ID，不传时返回全部类目
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: displayStatus
+          in: query
+          required: false
+          description: 显示状态，不传时返回全部
+          schema:
+            $ref: '#/components/schemas/ProductDisplayStatus'
+        - name: keyword
+          in: query
+          required: false
+          description: 同时匹配 nameZh 和 nameEn
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProductPage'
+              examples:
+                current:
+                  summary: 一个有锁定的在售商品
+                  value:
+                    ok: true
+                    data:
+                      items:
+                        - &productExample
+                          id: '1854239876543209560'
+                          categoryId: '1854239876543209540'
+                          categoryNameZh: 日用百货
+                          nameZh: 抽纸 10 包装
+                          nameEn: Facial Tissues 10-pack
+                          priceCents: 1290
+                          stock: 20
+                          lockedQty: 3
+                          sellableQty: 17
+                          salesCount: 58
+                          baseLikes: 30
+                          likeCount: 42
+                          onShelf: true
+                          displayStatus: on_sale
+                          summaryZh: 柔软三层，整箱 10 包
+                          summaryEn: Soft 3-ply tissues, 10 packs per box
+                          detailZh: 每包 100 抽，适合家庭日常使用。
+                          detailEn: 100 sheets per pack, for everyday household use.
+                          images:
+                            - key: prod/product/2026/11/01/abc.jpg
+                              url: https://cdn.example.com/prod/product/2026/11/01/abc.jpg
+                              width: 1080
+                              height: 1440
+                          version: 2
+                          createdAt: '2026-11-01T03:30:00Z'
+                          updatedAt: '2026-11-03T05:00:00Z'
+                      total: 1
+                      page: 1
+                      pageSize: 20
+                empty:
+                  summary: 没有匹配的商品
+                  value:
+                    ok: true
+                    data:
+                      items: []
+                      total: 0
+                      page: 1
+                      pageSize: 20
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（分页参数不合法、categoryId 格式不对、displayStatus 不是有效的状态、keyword 为空或超长）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    post:
+      tags: [product]
+      operationId: createProduct
+      summary: 新增商品
+      description: |
+        - categoryId 只能选**未删除的商城类目**，类目不存在或已删除时返回 VALIDATION_FAILED。
+        - priceCents 必须大于 0。页面上按元输入，最多两位小数，提交前转换为分。
+        - stock 是账面库存，≥ 0 的整数。新商品的锁定量为 0，所以可售等于账面。
+        - baseLikes 是 ≥ 0 的整数，不是整数或为负数时返回 VALIDATION_FAILED。
+        - images 1～9 张，第一张是主图。key 必须来自 presignUpload（用途为 product）的返回，宽高由前端读取。
+        - 库存为 0 也可以上架，小程序显示缺货。
+        - 新商品的 version 为 0，销量为 0，点赞数等于基础点赞。
+        - 商品没有规格和评价。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateInput'
+            examples:
+              current:
+                summary: 新增一个上架的商品
+                value:
+                  categoryId: '1854239876543209540'
+                  nameZh: 抽纸 10 包装
+                  nameEn: Facial Tissues 10-pack
+                  priceCents: 1290
+                  stock: 20
+                  baseLikes: 30
+                  onShelf: true
+                  summaryZh: 柔软三层，整箱 10 包
+                  summaryEn: Soft 3-ply tissues, 10 packs per box
+                  detailZh: 每包 100 抽，适合家庭日常使用。
+                  detailEn: 100 sheets per pack, for everyday household use.
+                  images:
+                    - key: prod/product/2026/11/01/abc.jpg
+                      width: 1080
+                      height: 1440
+      responses:
+        '200':
+          description: 成功，返回新建的商品
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+              examples:
+                current:
+                  summary: 新建的商品，锁定为 0，可售等于账面
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209561'
+                      categoryId: '1854239876543209540'
+                      categoryNameZh: 日用百货
+                      nameZh: 抽纸 10 包装
+                      nameEn: Facial Tissues 10-pack
+                      priceCents: 1290
+                      stock: 20
+                      lockedQty: 0
+                      sellableQty: 20
+                      salesCount: 0
+                      baseLikes: 30
+                      likeCount: 30
+                      onShelf: true
+                      displayStatus: on_sale
+                      summaryZh: 柔软三层，整箱 10 包
+                      summaryEn: Soft 3-ply tissues, 10 packs per box
+                      detailZh: 每包 100 抽，适合家庭日常使用。
+                      detailEn: 100 sheets per pack, for everyday household use.
+                      images:
+                        - key: prod/product/2026/11/01/abc.jpg
+                          url: https://cdn.example.com/prod/product/2026/11/01/abc.jpg
+                          width: 1080
+                          height: 1440
+                      version: 0
+                      createdAt: '2026-11-12T02:00:00Z'
+                      updatedAt: '2026-11-12T02:00:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（必填字段缺失、超长；priceCents 不大于 0；stock 或 baseLikes 为负数或不是整数；图片为 0 张或超过 9 张、key 不是上传接口发出的；类目不存在或已删除；出现未定义的字段）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  /products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [product]
+      operationId: getProduct
+      summary: 查看商品
+      description: |
+        编辑页使用。返回商品的全部字段，以及当前的锁定和可售，用于在编辑页展示「有几件被待支付订单占用」。
+        返回的 version 在修改时原样提交。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+              examples:
+                current:
+                  summary: 有 3 件被锁定的商品
+                  value:
+                    ok: true
+                    data: *productExample
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（商品不存在）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+    put:
+      tags: [product]
+      operationId: updateProduct
+      summary: 修改商品
+      description: |
+        请求中带全部可编辑字段和读取到的 version。字段规则与 createProduct 相同。
+
+        **入库：** 不单独提供入库接口。编辑页的「入库」由前端在当前账面上加一个正整数，
+        算出新的 stock 后随本接口一起提交；点保存才生效。直接改账面也是改 stock。
+
+        **乐观锁：**
+        - 提交 getProduct 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+        - 版本不一致（其他店员在此期间保存过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+          「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+        - 写入成功后 version 加 1，返回最新的商品。
+        - **所有改变账面 stock 的写入都推进同一个 version**：本接口的写入，以及小程序支付成功时的账面扣减
+          （与扣账面、加销量在同一事务内完成）。本接口提交的是绝对的 stock，扣减不推进 version 的话，
+          旧页面保存会把已扣掉的件数加回去。
+        - 只改变锁定量的动作（下单锁定、取消或超时释放）**不增加 version**，用户点赞的变化也不增加，
+          否则店员编辑期间每有一笔下单都会冲突。保存时仍按写入时的实时锁定量校验。
+        - 验收用例：读取商品得到 stock=20、version=2 → 支付成功扣减 3 件（stock=17、version=3）→
+          用 version=2 提交 stock=30，返回 VERSION_CONFLICT，账面仍为 17。
+
+        **库存校验：**
+        - stock 是 ≥ 0 的整数。
+        - 服务器在写入时取**当时**的锁定量比较，不以前端看到的 lockedQty 为准。stock 小于锁定量时返回
+          STOCK_BELOW_LOCKED，账面不变；message 和 details 写明锁定的件数，如「账面库存不能小于已锁定的 3 件」。
+        - 先检查 version，再检查库存：version 过期时只返回 VERSION_CONFLICT。
+
+        **其他：**
+        - categoryId 必须是未删除的商城类目。原类目已删除时，需要改选一个类目，否则返回 VALIDATION_FAILED。
+        - 修改价格只影响新订单，已有订单使用下单时的价格。
+        - 修改 baseLikes 不删除用户已有的点赞，likeCount 随之变化。
+        - 取消上架后，小程序的列表、搜索、详情购买都不可用；已有订单不受影响。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateInput'
+            examples:
+              current:
+                summary: 入库 10 件（账面 20 → 30）
+                value:
+                  categoryId: '1854239876543209540'
+                  nameZh: 抽纸 10 包装
+                  nameEn: Facial Tissues 10-pack
+                  priceCents: 1290
+                  stock: 30
+                  baseLikes: 30
+                  onShelf: true
+                  summaryZh: 柔软三层，整箱 10 包
+                  summaryEn: Soft 3-ply tissues, 10 packs per box
+                  detailZh: 每包 100 抽，适合家庭日常使用。
+                  detailEn: 100 sheets per pack, for everyday household use.
+                  images:
+                    - key: prod/product/2026/11/01/abc.jpg
+                      width: 1080
+                      height: 1440
+                  version: 2
+      responses:
+        '200':
+          description: 成功，返回修改后的商品
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+              examples:
+                current:
+                  summary: 入库后，version 加 1
+                  value:
+                    ok: true
+                    data:
+                      id: '1854239876543209560'
+                      categoryId: '1854239876543209540'
+                      categoryNameZh: 日用百货
+                      nameZh: 抽纸 10 包装
+                      nameEn: Facial Tissues 10-pack
+                      priceCents: 1290
+                      stock: 30
+                      lockedQty: 3
+                      sellableQty: 27
+                      salesCount: 58
+                      baseLikes: 30
+                      likeCount: 42
+                      onShelf: true
+                      displayStatus: on_sale
+                      summaryZh: 柔软三层，整箱 10 包
+                      summaryEn: Soft 3-ply tissues, 10 packs per box
+                      detailZh: 每包 100 抽，适合家庭日常使用。
+                      detailEn: 100 sheets per pack, for everyday household use.
+                      images:
+                        - key: prod/product/2026/11/01/abc.jpg
+                          url: https://cdn.example.com/prod/product/2026/11/01/abc.jpg
+                          width: 1080
+                          height: 1440
+                      version: 3
+                      createdAt: '2026-11-01T03:30:00Z'
+                      updatedAt: '2026-11-12T02:10:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（字段规则与 createProduct 相同；另外 version 缺失时也返回）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: NOT_FOUND（商品不存在）
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: VERSION_CONFLICT（提交的 version 已过期，商品已被他人修改。重新读取，不要盲目重试）；STOCK_BELOW_LOCKED（账面库存小于写入时的锁定量，如 message「账面库存不能小于已锁定的 3 件」，details 为 [{ field：stock，message：不能小于 3 }]）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
+  # ---------- 上传 ----------
+
+  /uploads/presign:
+    post:
+      tags: [upload]
+      operationId: presignUpload
+      summary: 申请图片上传地址
+      description: |
+        图片由前端直接上传到 AWS S3，不经过后端中转。流程：
+        1. 调用本接口，告诉服务器图片的用途、类型和大小。
+        2. 服务器校验后返回有时效的预签名上传地址 uploadUrl 和对象 key。
+        3. 前端用 **PUT** 把文件上传到 uploadUrl。请求头 Content-Type 必须与申请时的 contentType 一致，
+           文件大小必须与 size 一致，否则 S3 拒绝上传。
+        4. 前端读取图片的宽高，把 `{ key, width, height }` 提交给业务接口（如 createProduct 的 images）。
+
+        **限制：**
+        - purpose 目前只有 product（商品图片）。
+        - contentType 只允许 image/jpeg、image/png、image/webp。
+        - size 为文件的字节数，不超过 5MB（5242880 字节）。
+
+        **错误码的区分：**
+        - 字段缺失、类型不对（如 size 不是整数）、出现未定义的字段：VALIDATION_FAILED。
+        - 字段齐全，但图片类型不在允许范围内，或 size 超过 5MB：UPLOAD_NOT_ALLOWED。
+          前端据此提示「只支持 JPG、PNG、WebP 格式，且不超过 5MB」。
+
+        **其他：**
+        - uploadUrl 在 expiresAt 之后失效，过期后重新申请。有效期由服务器决定，以 expiresAt 为准。
+        - key 由服务器生成，前端不要修改，也不要据此拼接图片地址；显示图片时使用业务接口返回的 url。
+        - 申请了地址但没有提交给业务接口的图片，由服务器另行清理，前端不需要处理。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignUploadInput'
+            examples:
+              current:
+                summary: 申请上传一张 1.2MB 的商品图片
+                value:
+                  purpose: product
+                  contentType: image/jpeg
+                  size: 1258291
+      responses:
+        '200':
+          description: 成功，返回预签名上传地址和对象 key
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PresignUploadResult'
+              examples:
+                current:
+                  summary: 预签名上传地址
+                  value:
+                    ok: true
+                    data:
+                      key: prod/product/2026/11/12/9f3c2a7e.jpg
+                      uploadUrl: https://example-bucket.s3.ap-southeast-2.amazonaws.com/prod/product/2026/11/12/9f3c2a7e.jpg?X-Amz-Signature=example
+                      expiresAt: '2026-11-12T02:15:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          description: VALIDATION_FAILED（字段缺失、类型不对、出现未定义的字段）；UPLOAD_NOT_ALLOWED（图片类型不是 JPG、PNG、WebP，或 size 超过 5MB）
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '500':
+          $ref: '#/components/responses/InternalError'
+          description: INTERNAL_ERROR（服务器内部错误）
+
   # ===== B 区块结束 =====
 
   # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -1182,8 +2839,11 @@ paths:
       operationId: login
       summary: 管理员登录
       description: |
-        账号加密码登录，与顾客的微信登录分开。登录成功返回 token 和过期时间。
+        账号加密码登录，与顾客的微信登录分开。
+        登录成功时通过 Set-Cookie 下发通行证（httpOnly cookie），响应体只返回过期时间和当前管理员，不返回通行证。
         登录失败统一返回 BAD_PASSWORD，不区分是账号错还是密码错。
+        同一账号加同一 IP，15 分钟内失败 5 次就暂时锁定，返回 TOO_MANY_ATTEMPTS；账号不存在时也计数。
+        admin.mustChangePassword 为 true 时，前端直接跳到改密码页。
       security: []
       requestBody:
         required: true
@@ -1194,6 +2854,9 @@ paths:
       responses:
         '200':
           description: 成功
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
           content:
             application/json:
               schema:
@@ -1215,6 +2878,142 @@ paths:
                 ok: false
                 code: BAD_PASSWORD
                 message: 账号或密码错误
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '429':
+          description: TOO_MANY_ATTEMPTS（失败次数过多，暂时锁定）
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                code: TOO_MANY_ATTEMPTS
+                message: 尝试次数过多，请稍后再试
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: 登出
+      description: 作废当前通行证，并通过 Set-Cookie 清除浏览器中的 cookie。
+      responses:
+        '200':
+          description: 成功，没有数据返回
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: 'null'
+              example:
+                ok: true
+                data: null
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: FORBIDDEN（Origin 请求头不是后台自己的域名）
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: 当前管理员
+      description: |
+        返回当前管理员和通行证过期时间。前端读不到 cookie，打开后台时靠本接口判断是否已登录：
+        返回 NEED_LOGIN 就跳转登录页；admin.mustChangePassword 为 true 就跳转改密码页。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResult'
+        '401':
+          $ref: '#/components/responses/NeedLogin'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: 修改密码
+      description: |
+        需要旧密码。首次登录（mustChangePassword 为 true）时必须先调用本接口，才能使用其他接口。
+        新密码至少 12 位，不能是常见密码，不能与旧密码相同。
+        成功后作废该账号的所有通行证（包括当前这一个），并通过 Set-Cookie 清除 cookie，前端跳转登录页重新登录。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 成功，没有数据返回
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OkResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: 'null'
+              example:
+                ok: true
+                data: null
+        '400':
+          description: |
+            VALIDATION_FAILED（参数校验失败）；
+            WEAK_PASSWORD（新密码不足 12 位、是常见密码，或与旧密码相同）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                code: WEAK_PASSWORD
+                message: 新密码至少 12 位，且不能是常见密码
+        '401':
+          description: |
+            BAD_PASSWORD（旧密码错误）；
+            NEED_LOGIN（未登录，或登录已失效）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                code: BAD_PASSWORD
+                message: 旧密码错误
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: FORBIDDEN（Origin 请求头不是后台自己的域名）
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1246,6 +3045,8 @@ paths:
                               $ref: '#/components/schemas/FleaCategory'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
@@ -1275,6 +3076,9 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: NAME_DUPLICATED（中文名或英文名与已有闲置类目重复）
@@ -1294,6 +3098,9 @@ paths:
           $ref: '#/components/responses/OkNoData'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -1358,6 +3165,8 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1387,6 +3196,8 @@ paths:
                         $ref: '#/components/schemas/ListingDetail'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1415,6 +3226,9 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '401':
           $ref: '#/components/responses/NeedLogin'
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -1427,12 +3241,33 @@ paths:
 
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-pickaus_admin
       description: |
-        登录接口返回的管理员 token，放在请求头中：`Authorization: Bearer <token>`。
-        顾客 token 不能调用管理端接口。token 缺失、过期或无效时返回 `NEED_LOGIN`。
+        登录成功时服务器下发的通行证，保存在同域的 httpOnly cookie 中
+        （`HttpOnly; Secure; SameSite=Strict; Path=/`），浏览器自动携带，前端代码读不到也不需要处理。
+        通行证保存在服务器端，最长 30 天（写在配置里）；登出时作废当前通行证，改密码或停用账号时作废该账号的所有通行证。
+        通行证缺失、过期或已作废时返回 `NEED_LOGIN`。顾客的登录凭证不能调用管理端接口。
+        除 GET 外的请求，服务器检查 `Origin` 请求头，不是后台自己的域名时返回 `FORBIDDEN`。
+        `mustChangePassword` 为 true 的管理员，除 /login、/logout、/me、/password 外都返回 `PASSWORD_CHANGE_REQUIRED`。
+        详见 docs/api/conventions.md 第 4 节和 ADR 0006。
+
+  headers:
+    SetSessionCookie:
+      description: 下发通行证。值的格式：`__Host-pickaus_admin=<通行证>; Path=/; Max-Age=<秒数>; HttpOnly; Secure; SameSite=Strict`
+      schema:
+        type: string
+    ClearSessionCookie:
+      description: 清除通行证。值的格式：`__Host-pickaus_admin=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`
+      schema:
+        type: string
+    RetryAfter:
+      description: 还需等待的秒数，之后才能再试
+      schema:
+        type: integer
+        minimum: 1
 
   parameters:
     Page:
@@ -1491,7 +3326,7 @@ components:
               - field: nameZh
                 message: 不能为空
     NeedLogin:
-      description: NEED_LOGIN（未登录，或 token 失效）
+      description: NEED_LOGIN（未登录，或登录已失效）
       content:
         application/json:
           schema:
@@ -1510,6 +3345,16 @@ components:
             ok: false
             code: FORBIDDEN
             message: 没有权限
+    PasswordChangeRequired:
+      description: PASSWORD_CHANGE_REQUIRED（首次登录须先改密码）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            ok: false
+            code: PASSWORD_CHANGE_REQUIRED
+            message: 请先修改初始密码
     NotFound:
       description: NOT_FOUND（资源不存在）
       content:
@@ -1679,10 +3524,15 @@ components:
         - INTERNAL_ERROR
         # 管理端
         - BAD_PASSWORD
+        - TOO_MANY_ATTEMPTS
+        - PASSWORD_CHANGE_REQUIRED
+        - WEAK_PASSWORD
         - NAME_DUPLICATED
         - CATEGORY_IN_USE
         - STOCK_BELOW_LOCKED
         - LAST_SLOT
+        - SUBURB_IN_OTHER_ZONE
+        - SUBURB_STATE_MISMATCH
         - LISTING_NOT_ON_SALE
         - REFUND_PAYOUT_FAILED
         - UPLOAD_NOT_ALLOWED
@@ -1729,6 +3579,27 @@ components:
 
     # ===== A 区块 @RealninX：概览、订单、退款、举报 =====
 
+    AustralianState:
+      type: string
+      enum:
+        - NSW
+        - VIC
+        - QLD
+        - WA
+        - SA
+        - TAS
+        - ACT
+        - NT
+      description: |
+        澳洲州和领地的标准大写缩写。A、B 区块共用，供订单地址快照、城市及 suburb 字典引用。
+        - NSW：新南威尔士州
+        - VIC：维多利亚州
+        - QLD：昆士兰州
+        - WA：西澳大利亚州
+        - SA：南澳大利亚州
+        - TAS：塔斯马尼亚州
+        - ACT：澳大利亚首都领地
+        - NT：北领地
     OrderStatus:
       type: string
       enum:
@@ -1830,20 +3701,31 @@ components:
         street:
           type: string
           maxLength: 150
-        districtNameZh:
+        zoneNameZh:
           anyOf:
             - type: string
-              maxLength: 60
+              maxLength: 20
             - type: "null"
+          description: 下单时配送大区中文名的快照；快递订单允许为 null，不按当前大区名称回算。
+        suburb:
+          type: string
+          maxLength: 40
+          description: 下单时 suburb 名称的快照，线下和快递订单均必返。
         postcode:
           type: string
           pattern: ^[0-9]{4}$
           description: 四位邮编，按字符串保留。
+        state:
+          $ref: "#/components/schemas/AustralianState"
+          description: 下单时所属州的快照，线下和快递订单均必返。
       required:
         - formatted
         - street
-        - districtNameZh
+        - zoneNameZh
+        - suburb
         - postcode
+        - state
+      description: 下单时保存的地址快照；后续大区、成员或 suburb 字典变化不改写本对象。新字段不得根据当前配置反推历史值。
     OrderListItem:
       type: object
       additionalProperties: false
@@ -2050,8 +3932,10 @@ components:
           address:
             formatted: 演示地址，请勿配送
             street: 示例街道
-            districtNameZh: 演示区域
+            zoneNameZh: 演示区域
+            suburb: Example Suburb
             postcode: "2000"
+            state: NSW
           deliveryDate: 2026-11-02
           slotNameZh: 演示时段
           remark: null
@@ -2446,16 +4330,17 @@ components:
           maxLength: 40
         fulfillment:
           $ref: "#/components/schemas/Fulfillment"
-        deliverableDistrictNamesZh:
+        deliverableZoneNamesZh:
           type: array
           items:
             type: string
-            maxLength: 40
+            maxLength: 20
+          description: 线下城市中至少有一个最终可送 suburb 的配送大区中文名，按大区 sort 排序。默认不可送但有成员覆盖为可送时纳入；默认可送但成员全部不可送时不纳入。快递城市为 []，不据此推断快递服务范围为空。
       required:
         - id
         - nameZh
         - fulfillment
-        - deliverableDistrictNamesZh
+        - deliverableZoneNamesZh
     Summary:
       type: object
       additionalProperties: false
@@ -2484,6 +4369,7 @@ components:
             $ref: "#/components/schemas/CityOverview"
         localFeeCents:
           $ref: "#/components/schemas/Cents"
+          description: 全店默认线下配送费；配送大区可覆盖。此值不是每张订单的最终运费，也不用于快递邮费；已有订单继续读取 shippingFeeCents 快照。
         postFeeCents:
           $ref: "#/components/schemas/Cents"
         freeShippingThresholdCents:
@@ -2676,6 +4562,903 @@ components:
 
     # ===== B 区块 @MoonLight-QAQ：城市、商城类目、商品、配送、图片上传 =====
 
+    # ---------- 城市 ----------
+
+    City:
+      type: object
+      description: 城市。商城和闲置共用。城市不能删除
+      additionalProperties: false
+      required: [id, nameZh, nameEn, fulfillment, state, timezone, sort]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          description: 所属州。创建后不能修改，用来校验哪些 suburb 能加入这个城市的配送大区
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名，如 Australia/Sydney。前端按它格式化这个城市的时间
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - id: '1854239876543209472'
+          nameZh: 悉尼
+          nameEn: Sydney
+          fulfillment: local
+          state: NSW
+          timezone: Australia/Sydney
+          sort: 1
+    CityCreateInput:
+      type: object
+      description: 新增城市的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, state, timezone, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+          default: post
+          description: 不传时默认为 post（快递）
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          description: 所属州。必填，创建后不能修改
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名。前端按州预填（NSW、ACT 为 Australia/Sydney，VIC 为 Australia/Melbourne 等），由店员确认
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 布里斯班
+          nameEn: Brisbane
+          fulfillment: post
+          state: QLD
+          timezone: Australia/Brisbane
+          sort: 3
+    CityUpdateInput:
+      type: object
+      description: 修改城市的请求体。不包含 state，州创建后不能修改
+      additionalProperties: false
+      required: [nameZh, nameEn, fulfillment, timezone, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        fulfillment:
+          $ref: '#/components/schemas/Fulfillment'
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区名
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 悉尼
+          nameEn: Sydney
+          fulfillment: post
+          timezone: Australia/Sydney
+          sort: 1
+
+    # ---------- suburb 与配送大区 ----------
+
+    Suburb:
+      type: object
+      description: suburb 字典中的一项。从官方数据导入，后台只读。name + postcode + state 唯一；不包含城市
+      additionalProperties: false
+      required: [id, name, postcode, state]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          readOnly: true
+          description: suburb 名称，如 Leichhardt
+        postcode:
+          type: string
+          pattern: '^[0-9]{4}$'
+          readOnly: true
+          description: 四位邮编，按字符串保存，保留开头的 0（如 0800）
+        state:
+          $ref: '#/components/schemas/AustralianState'
+          readOnly: true
+      examples:
+        - id: '1854239876543209500'
+          name: Leichhardt
+          postcode: '2040'
+          state: NSW
+    SuburbPage:
+      description: suburb 搜索结果的分页
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Suburb'
+      examples:
+        - items:
+            - id: '1854239876543209500'
+              name: Leichhardt
+              postcode: '2040'
+              state: NSW
+          total: 1
+          page: 1
+          pageSize: 20
+    DeliveryZone:
+      type: object
+      description: 配送大区。属于一个城市，圈定城市的服务范围；deliverable 和 localFeeCents 只对线下订单生效。大区不能删除
+      additionalProperties: false
+      required: [id, cityId, nameZh, nameEn, deliverable, localFeeCents, sort, suburbCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        cityId:
+          $ref: '#/components/schemas/Id'
+          description: 所属城市。创建后不能修改
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 同一城市内不能重复
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 同一城市内不能重复
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置。只对线下订单生效
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费。为 null 时使用全店统一配送费。只对线下订单生效
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+        suburbCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 大区内的 suburb 数
+      examples:
+        - id: '1854239876543209480'
+          cityId: '1854239876543209472'
+          nameZh: 内西区
+          nameEn: Inner West
+          deliverable: true
+          localFeeCents: null
+          sort: 1
+          suburbCount: 2
+    DeliveryZoneCreateInput:
+      type: object
+      description: 新增配送大区的请求体
+      additionalProperties: false
+      required: [cityId, nameZh, nameEn, deliverable, localFeeCents, sort]
+      properties:
+        cityId:
+          $ref: '#/components/schemas/Id'
+          description: 所属城市。创建后不能修改
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - cityId: '1854239876543209472'
+          nameZh: 东区
+          nameEn: Eastern Suburbs
+          deliverable: true
+          localFeeCents: 800
+          sort: 3
+    DeliveryZoneUpdateInput:
+      type: object
+      description: 修改配送大区的请求体。不包含 cityId，所属城市创建后不能修改
+      additionalProperties: false
+      required: [nameZh, nameEn, deliverable, localFeeCents, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        deliverable:
+          type: boolean
+          description: 大区内 suburb 的默认可送设置
+        localFeeCents:
+          anyOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+          description: 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 帕拉马塔
+          nameEn: Parramatta
+          deliverable: true
+          localFeeCents: null
+          sort: 2
+    ZoneSuburb:
+      type: object
+      description: 配送大区的成员，即 suburb 与大区的关联。移出大区只删除关联，不影响字典
+      additionalProperties: false
+      required: [suburb, deliverableOverride, deliverable, localFeeCents]
+      properties:
+        suburb:
+          $ref: '#/components/schemas/Suburb'
+        deliverableOverride:
+          type: [boolean, 'null']
+          description: 单独设置是否可送。为 null 时跟随大区
+        deliverable:
+          type: boolean
+          readOnly: true
+          description: 最终是否可送 = deliverableOverride 不为 null 时取它，否则取大区的 deliverable。只对线下订单生效
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          readOnly: true
+          description: 实际的线下配送费 = 大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。只对线下订单生效
+      examples:
+        - suburb:
+            id: '1854239876543209500'
+            name: Leichhardt
+            postcode: '2040'
+            state: NSW
+          deliverableOverride: null
+          deliverable: true
+          localFeeCents: 600
+    AddZoneSuburbsInput:
+      type: object
+      description: 往配送大区加入 suburb 的请求体
+      additionalProperties: false
+      required: [suburbIds]
+      properties:
+        suburbIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          description: 要加入的 suburb ID，1～100 个，不能重复
+          items:
+            $ref: '#/components/schemas/Id'
+      examples:
+        - suburbIds:
+            - '1854239876543209500'
+            - '1854239876543209501'
+    UpdateZoneSuburbInput:
+      type: object
+      description: 单独设置成员是否可送的请求体
+      additionalProperties: false
+      required: [deliverableOverride]
+      properties:
+        deliverableOverride:
+          type: [boolean, 'null']
+          description: true 或 false 表示单独设置；null 表示恢复跟随大区
+      examples:
+        - deliverableOverride: false
+
+    # ---------- 配送费用与时段 ----------
+
+    DeliveryConfig:
+      type: object
+      description: 配送费用，全店一份。修改只影响之后的新订单
+      additionalProperties: false
+      required: [localFeeCents, postFeeCents, freeShippingThresholdCents, version]
+      properties:
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 全店统一线下配送费，默认 600。配送大区的 localFeeCents 为 null 时使用
+        postFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 快递邮费，默认 800
+        freeShippingThresholdCents:
+          $ref: '#/components/schemas/Cents'
+          description: 包邮门槛，默认 5000。只对快递订单生效
+        version:
+          $ref: '#/components/schemas/Version'
+          readOnly: true
+      examples:
+        - localFeeCents: 600
+          postFeeCents: 800
+          freeShippingThresholdCents: 5000
+          version: 0
+    DeliveryConfigInput:
+      type: object
+      description: 修改配送费用的请求体。version 原样提交读取到的值
+      additionalProperties: false
+      required: [localFeeCents, postFeeCents, freeShippingThresholdCents, version]
+      properties:
+        localFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 全店统一线下配送费，≥ 0
+        postFeeCents:
+          $ref: '#/components/schemas/Cents'
+          description: 快递邮费，≥ 0
+        freeShippingThresholdCents:
+          $ref: '#/components/schemas/Cents'
+          description: 包邮门槛，≥ 0
+        version:
+          $ref: '#/components/schemas/Version'
+          description: 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT
+      examples:
+        - localFeeCents: 600
+          postFeeCents: 800
+          freeShippingThresholdCents: 100
+          version: 0
+    DeliverySlot:
+      type: object
+      description: 送达时段。每天共用，不绑定具体日期。钟点按城市当地时间理解
+      additionalProperties: false
+      required: [id, nameZh, nameEn, startTime, endTime, enabled, sort]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 如「上午」
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 如 Morning
+        startTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 开始钟点
+        endTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 结束钟点，必须晚于开始钟点
+        enabled:
+          type: boolean
+          description: 停用后，新的线下订单不能选
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - id: '1854239876543209520'
+          nameZh: 上午
+          nameEn: Morning
+          startTime: '08:00'
+          endTime: '12:00'
+          enabled: true
+          sort: 1
+    DeliverySlotInput:
+      type: object
+      description: 新增和修改送达时段的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, startTime, endTime, enabled, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 20
+        startTime:
+          $ref: '#/components/schemas/ClockTime'
+        endTime:
+          $ref: '#/components/schemas/ClockTime'
+          description: 必须晚于 startTime
+        enabled:
+          type: boolean
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 晚上
+          nameEn: Evening
+          startTime: '18:00'
+          endTime: '20:00'
+          enabled: true
+          sort: 3
+
+    # ---------- 商城类目 ----------
+
+    MallCategory:
+      type: object
+      description: 商城类目。与闲置类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改
+      additionalProperties: false
+      required: [id, nameZh, nameEn, sort, inUseCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: 不能与其他商城类目重复
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 不能与其他商城类目重复
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+        inUseCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 这个类目下已上架的商品数（包括缺货的）。大于 0 时不能删除，前端据此禁用删除按钮
+      examples:
+        - id: '1854239876543209540'
+          nameZh: 日用百货
+          nameEn: Household
+          sort: 1
+          inUseCount: 12
+    MallCategoryInput:
+      type: object
+      description: 新增商城类目的请求体
+      additionalProperties: false
+      required: [nameZh, nameEn, sort]
+      properties:
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 40
+        sort:
+          type: integer
+          description: 排序，越小越靠前
+      examples:
+        - nameZh: 节日礼品
+          nameEn: Festive Gifts
+          sort: 2
+
+    # ---------- 商品 ----------
+
+    ProductDisplayStatus:
+      type: string
+      enum: [on_sale, out_of_stock, off_shelf]
+      description: |
+        商品显示状态，由服务器计算
+        - on_sale：在售。已上架，且可售数大于 0
+        - out_of_stock：缺货。已上架，但可售数为 0
+        - off_shelf：已下架。店员取消了上架
+    Product:
+      type: object
+      description: 商品。没有规格和评价。列表和详情使用同一个结构
+      additionalProperties: false
+      required:
+        - id
+        - categoryId
+        - categoryNameZh
+        - nameZh
+        - nameEn
+        - priceCents
+        - stock
+        - lockedQty
+        - sellableQty
+        - salesCount
+        - baseLikes
+        - likeCount
+        - onShelf
+        - displayStatus
+        - summaryZh
+        - summaryEn
+        - detailZh
+        - detailEn
+        - images
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+          readOnly: true
+        categoryId:
+          $ref: '#/components/schemas/Id'
+          description: 商城类目 ID
+        categoryNameZh:
+          type: string
+          readOnly: true
+          description: 类目中文名，列表展示用。类目已删除时照常返回原名称
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 60
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 120
+        priceCents:
+          $ref: '#/components/schemas/Cents'
+          minimum: 1
+          description: 价格，必须大于 0
+        stock:
+          type: integer
+          minimum: 0
+          description: 账面库存，货架上的件数。不能小于 lockedQty
+        lockedQty:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 锁定：所有待支付订单占用的件数之和
+        sellableQty:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 可售 = 账面 − 锁定，由服务器计算
+        salesCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 销量
+        baseLikes:
+          type: integer
+          minimum: 0
+          description: 基础点赞
+        likeCount:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: 展示的点赞数 = 基础点赞 + 用户点赞人数
+        onShelf:
+          type: boolean
+          description: 是否上架
+        displayStatus:
+          $ref: '#/components/schemas/ProductDisplayStatus'
+          readOnly: true
+        summaryZh:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: 简介
+        summaryEn:
+          type: string
+          minLength: 1
+          maxLength: 400
+          description: 简介
+        detailZh:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 详情
+        detailEn:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: 详情
+        images:
+          type: array
+          minItems: 1
+          maxItems: 9
+          description: 1～9 张，第一张是主图
+          items:
+            $ref: '#/components/schemas/Image'
+        version:
+          $ref: '#/components/schemas/Version'
+          readOnly: true
+        createdAt:
+          $ref: '#/components/schemas/DateTime'
+          readOnly: true
+        updatedAt:
+          $ref: '#/components/schemas/DateTime'
+          readOnly: true
+      examples:
+        - id: '1854239876543209560'
+          categoryId: '1854239876543209540'
+          categoryNameZh: 日用百货
+          nameZh: 抽纸 10 包装
+          nameEn: Facial Tissues 10-pack
+          priceCents: 1290
+          stock: 20
+          lockedQty: 3
+          sellableQty: 17
+          salesCount: 58
+          baseLikes: 30
+          likeCount: 42
+          onShelf: true
+          displayStatus: on_sale
+          summaryZh: 柔软三层，整箱 10 包
+          summaryEn: Soft 3-ply tissues, 10 packs per box
+          detailZh: 每包 100 抽，适合家庭日常使用。
+          detailEn: 100 sheets per pack, for everyday household use.
+          images:
+            - key: prod/product/2026/11/01/abc.jpg
+              url: https://cdn.example.com/prod/product/2026/11/01/abc.jpg
+              width: 1080
+              height: 1440
+          version: 2
+          createdAt: '2026-11-01T03:30:00Z'
+          updatedAt: '2026-11-03T05:00:00Z'
+    ProductCreateInput:
+      type: object
+      description: 新增商品的请求体
+      additionalProperties: false
+      required:
+        - categoryId
+        - nameZh
+        - nameEn
+        - priceCents
+        - stock
+        - baseLikes
+        - onShelf
+        - summaryZh
+        - summaryEn
+        - detailZh
+        - detailEn
+        - images
+      properties:
+        categoryId:
+          $ref: '#/components/schemas/Id'
+          description: 未删除的商城类目 ID
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 60
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 120
+        priceCents:
+          $ref: '#/components/schemas/Cents'
+          minimum: 1
+          description: 价格，必须大于 0
+        stock:
+          type: integer
+          minimum: 0
+          description: 账面库存
+        baseLikes:
+          type: integer
+          minimum: 0
+          description: 基础点赞
+        onShelf:
+          type: boolean
+        summaryZh:
+          type: string
+          minLength: 1
+          maxLength: 200
+        summaryEn:
+          type: string
+          minLength: 1
+          maxLength: 400
+        detailZh:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        detailEn:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        images:
+          type: array
+          minItems: 1
+          maxItems: 9
+          description: 1～9 张，第一张是主图
+          items:
+            $ref: '#/components/schemas/ImageInput'
+      examples:
+        - categoryId: '1854239876543209540'
+          nameZh: 抽纸 10 包装
+          nameEn: Facial Tissues 10-pack
+          priceCents: 1290
+          stock: 20
+          baseLikes: 30
+          onShelf: true
+          summaryZh: 柔软三层，整箱 10 包
+          summaryEn: Soft 3-ply tissues, 10 packs per box
+          detailZh: 每包 100 抽，适合家庭日常使用。
+          detailEn: 100 sheets per pack, for everyday household use.
+          images:
+            - key: prod/product/2026/11/01/abc.jpg
+              width: 1080
+              height: 1440
+    ProductUpdateInput:
+      type: object
+      description: 修改商品的请求体。字段与 ProductCreateInput 相同，另加 version。入库也通过这里提交新的 stock
+      additionalProperties: false
+      required:
+        - categoryId
+        - nameZh
+        - nameEn
+        - priceCents
+        - stock
+        - baseLikes
+        - onShelf
+        - summaryZh
+        - summaryEn
+        - detailZh
+        - detailEn
+        - images
+        - version
+      properties:
+        categoryId:
+          $ref: '#/components/schemas/Id'
+          description: 未删除的商城类目 ID
+        nameZh:
+          type: string
+          minLength: 1
+          maxLength: 60
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 120
+        priceCents:
+          $ref: '#/components/schemas/Cents'
+          minimum: 1
+          description: 价格，必须大于 0
+        stock:
+          type: integer
+          minimum: 0
+          description: 新的账面库存。入库时为当前账面加入库数。不能小于写入时的锁定量
+        baseLikes:
+          type: integer
+          minimum: 0
+          description: 基础点赞
+        onShelf:
+          type: boolean
+        summaryZh:
+          type: string
+          minLength: 1
+          maxLength: 200
+        summaryEn:
+          type: string
+          minLength: 1
+          maxLength: 400
+        detailZh:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        detailEn:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        images:
+          type: array
+          minItems: 1
+          maxItems: 9
+          description: 1～9 张，第一张是主图
+          items:
+            $ref: '#/components/schemas/ImageInput'
+        version:
+          $ref: '#/components/schemas/Version'
+          description: 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT
+      examples:
+        - categoryId: '1854239876543209540'
+          nameZh: 抽纸 10 包装
+          nameEn: Facial Tissues 10-pack
+          priceCents: 1290
+          stock: 30
+          baseLikes: 30
+          onShelf: true
+          summaryZh: 柔软三层，整箱 10 包
+          summaryEn: Soft 3-ply tissues, 10 packs per box
+          detailZh: 每包 100 抽，适合家庭日常使用。
+          detailEn: 100 sheets per pack, for everyday household use.
+          images:
+            - key: prod/product/2026/11/01/abc.jpg
+              width: 1080
+              height: 1440
+          version: 2
+    ProductPage:
+      description: 商品列表的分页
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Product'
+      examples:
+        - items: []
+          total: 0
+          page: 1
+          pageSize: 20
+
+    # ---------- 上传 ----------
+
+    UploadPurpose:
+      type: string
+      enum: [product]
+      description: |
+        图片用途，服务器据此决定 key 的目录
+        - product：商品图片
+    PresignUploadInput:
+      type: object
+      description: 申请图片上传地址的请求体
+      additionalProperties: false
+      required: [purpose, contentType, size]
+      properties:
+        purpose:
+          $ref: '#/components/schemas/UploadPurpose'
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: 图片的 MIME 类型。不在允许范围内时返回 UPLOAD_NOT_ALLOWED。上传时的 Content-Type 必须与它一致
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5242880
+          description: 文件大小（字节），不超过 5MB。超过时返回 UPLOAD_NOT_ALLOWED
+      examples:
+        - purpose: product
+          contentType: image/jpeg
+          size: 1258291
+    PresignUploadResult:
+      type: object
+      description: 预签名上传地址
+      additionalProperties: false
+      required: [key, uploadUrl, expiresAt]
+      properties:
+        key:
+          $ref: '#/components/schemas/ImageKey'
+          readOnly: true
+          description: 对象 key，由服务器生成。上传成功后与图片宽高一起提交给业务接口
+        uploadUrl:
+          type: string
+          format: uri
+          readOnly: true
+          description: 预签名上传地址，用 PUT 上传。只用于上传，不能用来显示图片
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+          readOnly: true
+          description: uploadUrl 的失效时间点，过期后重新申请
+      examples:
+        - key: prod/product/2026/11/12/9f3c2a7e.jpg
+          uploadUrl: https://example-bucket.s3.ap-southeast-2.amazonaws.com/prod/product/2026/11/12/9f3c2a7e.jpg?X-Amz-Signature=example
+          expiresAt: '2026-11-12T02:15:00Z'
+
     # ===== B 区块结束 =====
 
     # ===== C 区块 @celine-hy：登录、闲置类目、闲置 =====
@@ -2684,8 +5467,10 @@ components:
 
     Admin:
       type: object
-      description: 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改
-      required: [id, account]
+      description: |
+        管理员。第一版不分角色，所有账号都是管理员；以后需要区分店长、店员时再加 role 字段。
+        账号由服务器初始化，后台不提供管理员的增删改。
+      required: [id, account, mustChangePassword]
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -2693,6 +5478,9 @@ components:
           type: string
           maxLength: 32
           description: 登录账号
+        mustChangePassword:
+          type: boolean
+          description: 是否必须先改密码。账号初始化后为 true，改密码成功后变为 false。为 true 时前端直接跳到改密码页
     LoginRequest:
       type: object
       required: [account, password]
@@ -2709,15 +5497,29 @@ components:
           description: 密码。长度上限为建议值
     LoginResult:
       type: object
-      required: [token, expiresAt, admin]
+      description: 登录状态。登录接口和 GET /me 共用。通行证不在这里，由服务器通过 httpOnly cookie 下发
+      required: [expiresAt, admin]
       properties:
-        token:
-          type: string
-          description: '管理员 token，放在请求头中：`Authorization: Bearer <token>`'
         expiresAt:
           $ref: '#/components/schemas/DateTime'
         admin:
           $ref: '#/components/schemas/Admin'
+    ChangePasswordRequest:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 旧密码
+        newPassword:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: |
+            新密码。至少 12 位，不能是常见密码，不能与旧密码相同，否则返回 WEAK_PASSWORD。
+            这里的 minLength 只拦截空值，长度规则由服务器检查并返回 WEAK_PASSWORD，以便前端显示统一提示
 
     # ---------- 闲置类目 ----------
 

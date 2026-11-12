@@ -4,7 +4,7 @@ import { delay } from 'msw'
 import { http as mockHttp, HttpResponse, type HttpResponseResolver } from 'msw/http'
 import { setupServer } from 'msw/node'
 import { createRefundFixtures } from '@/mocks/data/refund'
-import { createRefundHandlers, REFUND_MOCK_TOKENS } from '@/mocks/handlers/refund'
+import { createRefundHandlers, type RefundMockRole } from '@/mocks/handlers/refund'
 import { ApiError, http } from './http'
 import {
   refundApi,
@@ -447,19 +447,14 @@ it('非法输入转统一参数错误且不发送请求', async function testInv
   expect(requests).toBe(0)
 })
 
-/** 中文：安装真实模块 Mock 和合成审核员身份，仅修改测试实例，不持久化凭据。 English: Installs real module handlers and synthetic reviewer identity in this test instance without persisting credentials. */
+/** 中文：提供隔离测试的退款审核身份，不向请求添加鉴权头。 English: Supply the isolated test reviewer without adding an authentication header. */
+function readTestRefundRole(): RefundMockRole {
+  return 'reviewer'
+}
+
+/** 中文：安装退款 handler 和隔离测试会话。 English: Install the refund handlers with an isolated test session. */
 function installRefundMock(): void {
-  server.use(...createRefundHandlers(baseURL))
-  http.setAuth({
-    /** 中文：返回 Mock 专用合成身份，无输入或副作用。 English: Returns the Mock-only synthetic identity without input or effects. */
-    getToken(): string {
-      return REFUND_MOCK_TOKENS.reviewer
-    },
-    /** 中文：认证意外失效时使交叉测试失败，不执行导航。 English: Fails the integration on unexpected expiry without navigating. */
-    onNeedLogin(): never {
-      throw new Error('unexpected-refund-mock-auth-expiry')
-    },
-  })
+  server.use(...createRefundHandlers(baseURL, readTestRefundRole))
 }
 
 /** 中文：通过真实 API/HttpClient 解析全部默认退款 Mock，覆盖审核、渠道、空值和自动同意。 English: Parses every default refund Mock through real API/HttpClient, covering reviews, provider states, nulls and automatic approval. */

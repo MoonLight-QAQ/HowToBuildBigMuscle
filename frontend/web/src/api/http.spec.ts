@@ -8,19 +8,25 @@ import { ApiError, HttpClient } from './http'
 const baseURL = 'http://localhost:48123/api/admin'
 const fixtureURL = `${baseURL}/__test`
 const server = setupServer()
-let token: string | null = 'mock-token'
+let generation = 1
 let needLoginCalls = 0
+let passwordChangeCalls = 0
 let authThrows = false
 let client: HttpClient
 
 const auth = {
-  /** 中文：读取测试 token，无参数，无副作用。 English: Returns the current test token. */
-  getToken(): string | null {
-    return token
+  /** 中文：读取测试会话代次，无副作用。 English: Returns the current test session generation. */
+  getSessionGeneration(): number {
+    return generation
   },
   /** 中文：记录失效通知，可模拟适配器失败。 English: Counts notifications; may throw a test error. */
   onNeedLogin(): void {
     needLoginCalls += 1
+    if (authThrows) throw new Error('test-auth-adapter-failed')
+  },
+  /** 中文：记录改密码通知，可模拟适配器失败。 English: Counts notifications; may throw a test error. */
+  onPasswordChangeRequired(): void {
+    passwordChangeCalls += 1
     if (authThrows) throw new Error('test-auth-adapter-failed')
   },
 }
@@ -61,8 +67,9 @@ function startServer(): void {
 
 /** 中文：每例创建独立客户端并重置认证状态。 English: Resets test state and creates a fresh client. */
 function resetClient(): void {
-  token = 'mock-token'
+  generation = 1
   needLoginCalls = 0
+  passwordChangeCalls = 0
   authThrows = false
   client = new HttpClient({ baseURL, timeoutMs: 1000, auth })
 }
@@ -95,8 +102,8 @@ it.each([[], null])('成功 data 保留 %j', async function testEmptyData(data) 
   await expect(client.request('/__test', { parse: parseData })).resolves.toEqual(data)
 })
 
-/** 中文：验证参数和认证头进入请求。 English: Asserts query serialization and current Bearer header. */
-it('发送查询参数与 Bearer，不转换 ID', async function testRequestMetadata() {
+/** 中文：验证参数进入请求且不带认证头。 English: Asserts query serialization without an Authorization header. */
+it('发送查询参数，不转换 ID，不带 Authorization', async function testRequestMetadata() {
   /** 中文：回显已观察的请求参数。 English: Returns request metadata solely for this test. */
   function echoMetadata({ request }: Parameters<HttpResponseResolver>[0]): Response {
     const url = new URL(request.url)
@@ -115,31 +122,12 @@ it('发送查询参数与 Bearer，不转换 ID', async function testRequestMeta
       parse: parseData,
     }),
   ).resolves.toEqual({
-    authorization: 'Bearer mock-token',
+    authorization: null,
     query: 'id=1854239876543209472&page=1&enabled=false',
   })
 })
 
-/** 中文：验证每次请求读取最新认证。 English: Asserts token updates affect the next request. */
-it('每次请求读取最新 token', async function testFreshToken() {
-  /** 中文：回显认证头。 English: Returns the observed authorization header. */
-  function echoAuthorization({ request }: Parameters<HttpResponseResolver>[0]): Response {
-    return HttpResponse.json({
-      ok: true,
-      data: { authorization: request.headers.get('authorization') },
-    })
-  }
-  server.use(mockHttp.get(fixtureURL, echoAuthorization))
-  await expect(client.request('/__test', { parse: parseData })).resolves.toEqual({
-    authorization: 'Bearer mock-token',
-  })
-  token = 'replacement-token'
-  await expect(client.request('/__test', { parse: parseData })).resolves.toEqual({
-    authorization: 'Bearer replacement-token',
-  })
-})
-
-/** 中文：匿名和未接入认证均不带 token。 English: Asserts anonymous or unconfigured clients omit Bearer. */
+/** 中文：匿名和未接入认证也不带认证头。 English: Anonymous or unconfigured clients omit Authorization too. */
 it.each(['anonymous', 'unconfigured'])(
   '请求 %s 时不带认证',
   async function testNoAuthorization(mode) {
@@ -158,8 +146,8 @@ it.each(['anonymous', 'unconfigured'])(
   },
 )
 
-/** 中文：凭据读取失败须在发送前安全终止。 English: Token-reader failure rejects safely before dispatch. */
-it('首次读取 token 异常归一化为 protocol，且不发送请求或携带原错误', async function testFailingTokenRead() {
+/** 中文：会话代次读取失败须在发送前安全终止。 English: Generation-reader failure rejects safely before dispatch. */
+it('首次读取会话代次异常归一化为 protocol，且不发送请求或携带原错误', async function testFailingGenerationRead() {
   let requests = 0
   /** 中文：记录是否错误发网。 English: Counts dispatches and returns a fixture if unexpectedly reached. */
   function countRequests(): Response {
@@ -168,13 +156,10 @@ it('首次读取 token 异常归一化为 protocol，且不发送请求或携带
   }
   server.use(mockHttp.get(fixtureURL, countRequests))
   client.setAuth({
-    /** 中文：模拟凭据读取异常。 English: Throws synthetic sensitive context instead of returning a token. */
-    getToken(): string | null {
-      throw new Error('private-token-reader-marker')
-    },
-    /** 中文：记录异常路径是否触发失效。 English: Counts session expiry notifications for this test. */
-    onNeedLogin(): void {
-      needLoginCalls += 1
+    ...auth,
+    /** 中文：模拟代次读取异常。 English: Throws synthetic sensitive context instead of a generation. */
+    getSessionGeneration(): number {
+      throw new Error('private-session-reader-marker')
     },
   })
   try {
@@ -183,9 +168,9 @@ it('首次读取 token 异常归一化为 protocol，且不发送请求或携带
   } catch (error) {
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ kind: 'protocol', code: null, status: null })
-    expect((error as Error).message).not.toContain('private-token-reader-marker')
+    expect((error as Error).message).not.toContain('private-session-reader-marker')
     expect(error).not.toHaveProperty('cause')
-    expect(JSON.stringify(error)).not.toContain('private-token-reader-marker')
+    expect(JSON.stringify(error)).not.toContain('private-session-reader-marker')
   }
   expect(requests).toBe(0)
   expect(needLoginCalls).toBe(0)
@@ -269,8 +254,8 @@ it('BAD_PASSWORD 即使 HTTP 401 也不触发登录失效', async function testB
   expect(needLoginCalls).toBe(0)
 })
 
-/** 中文：相同凭据的重复失效只通知一次。 English: Repeated NEED_LOGIN errors notify once per token. */
-it('NEED_LOGIN 对同一 token 去重通知', async function testNeedLoginDeduplication() {
+/** 中文：同一会话代次的重复失效只通知一次。 English: Repeated NEED_LOGIN errors notify once per generation. */
+it('NEED_LOGIN 对同一会话代次去重通知', async function testNeedLoginDeduplication() {
   server.use(
     mockHttp.get(
       fixtureURL,
@@ -286,7 +271,7 @@ it('NEED_LOGIN 对同一 token 去重通知', async function testNeedLoginDedupl
     { status: 'rejected', reason: { code: 'NEED_LOGIN' } },
   ])
   expect(needLoginCalls).toBe(1)
-  token = 'new-session-token'
+  generation += 1
   await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
     code: 'NEED_LOGIN',
   })
@@ -307,11 +292,11 @@ it('匿名请求的 NEED_LOGIN 不影响已登录会话', async function testAno
   expect(needLoginCalls).toBe(0)
 })
 
-/** 中文：旧请求失败不得清理新 token。 English: A stale response must not invalidate a newer session. */
-it('旧 token 的 NEED_LOGIN 不影响请求期间建立的新会话', async function testStaleSession() {
-  /** 中文：收到旧请求时模拟会话轮换，再返回失败。 English: Rotates the token before a stale response. */
+/** 中文：旧请求失败不得清理新会话。 English: A stale response must not invalidate a newer session. */
+it('旧会话的 NEED_LOGIN 不影响请求期间建立的新会话', async function testStaleSession() {
+  /** 中文：收到旧请求时模拟会话轮换，再返回失败。 English: Bumps the generation before a stale response. */
   function staleFailure(): Response {
-    token = 'new-session-token'
+    generation += 1
     return HttpResponse.json(
       { ok: false, code: 'NEED_LOGIN', message: '旧会话失败' },
       { status: 401 },
@@ -339,19 +324,105 @@ it('登录失效回调异常不掩盖原业务错误', async function testFailin
   })
 })
 
+/** 中文：须改密码时通知适配器一次。 English: PASSWORD_CHANGE_REQUIRED notifies the adapter. */
+it('PASSWORD_CHANGE_REQUIRED 通知适配器跳转改密码页，并保留原业务错误', async function testPasswordChangeRequired() {
+  server.use(
+    mockHttp.get(
+      fixtureURL,
+      respondWith(
+        { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+        403,
+      ),
+    ),
+  )
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    kind: 'business',
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+  expect(passwordChangeCalls).toBe(1)
+  expect(needLoginCalls).toBe(0)
+})
+
+/** 中文：匿名请求不触发改密码跳转。 English: Anonymous requests do not notify. */
+it('匿名请求的 PASSWORD_CHANGE_REQUIRED 不通知适配器', async function testAnonymousPasswordChange() {
+  server.use(
+    mockHttp.get(
+      fixtureURL,
+      respondWith(
+        { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+        403,
+      ),
+    ),
+  )
+  await expect(
+    client.request('/__test', { anonymous: true, parse: parseData }),
+  ).rejects.toMatchObject({ code: 'PASSWORD_CHANGE_REQUIRED' })
+  expect(passwordChangeCalls).toBe(0)
+})
+
+/** 中文：改密码回调异常不掩盖请求失败。 English: Adapter exceptions must not replace the ApiError. */
+/** 中文：旧会话的晚到响应不得影响新会话。 English: A stale response must not flag a newer session. */
+it('旧会话的 PASSWORD_CHANGE_REQUIRED 不影响请求期间建立的新会话', async function testStalePasswordChange() {
+  /** 中文：收到旧请求时模拟重新登录，再返回失败。 English: Bumps the generation before a stale response. */
+  function staleFailure(): Response {
+    generation += 2
+    return HttpResponse.json(
+      { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+      { status: 403 },
+    )
+  }
+  server.use(mockHttp.get(fixtureURL, staleFailure))
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    kind: 'business',
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+  expect(passwordChangeCalls).toBe(0)
+})
+
+/** 中文：换了适配器后旧适配器不再收到通知。 English: A replaced adapter is not notified. */
+it('请求期间更换适配器时，PASSWORD_CHANGE_REQUIRED 不通知旧适配器', async function testReplacedAdapter() {
+  /** 中文：收到请求时移除适配器，再返回失败。 English: Removes the adapter before responding. */
+  function replaceThenFail(): Response {
+    client.setAuth(null)
+    return HttpResponse.json(
+      { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+      { status: 403 },
+    )
+  }
+  server.use(mockHttp.get(fixtureURL, replaceThenFail))
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+  expect(passwordChangeCalls).toBe(0)
+})
+
+it('改密码回调异常不掩盖原业务错误', async function testFailingPasswordChangeAdapter() {
+  authThrows = true
+  server.use(
+    mockHttp.get(
+      fixtureURL,
+      respondWith(
+        { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+        403,
+      ),
+    ),
+  )
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    kind: 'business',
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+})
+
 /** 中文：认证回检失败也保留业务失败。 English: Session recheck failures must preserve NEED_LOGIN. */
-it('登录失效时 token 回检异常仍保留原业务错误', async function testFailingTokenRecheck() {
+it('登录失效时会话代次回检异常仍保留原业务错误', async function testFailingGenerationRecheck() {
   let reads = 0
   client.setAuth({
-    /** 中文：首读给出凭据，回检模拟失败。 English: Returns a token once, then throws on recheck. */
-    getToken(): string | null {
+    ...auth,
+    /** 中文：首读给出代次，回检模拟失败。 English: Returns a generation once, then throws on recheck. */
+    getSessionGeneration(): number {
       reads += 1
-      if (reads > 1) throw new Error('test-token-reader-failed')
-      return 'mock-token'
-    },
-    /** 中文：记录通知。 English: Counts session notifications without external effects. */
-    onNeedLogin(): void {
-      needLoginCalls += 1
+      if (reads > 1) throw new Error('test-session-reader-failed')
+      return 1
     },
   })
   server.use(
