@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import { useAuthStore } from '@/stores/auth'
-import { setupAuthGuard } from './guard'
+import { CHANGE_PASSWORD_PATH, HOME_PATH, LOGIN_PATH, setupAuthGuard } from './guard'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -20,7 +20,19 @@ const APP_TITLE = '拾澳管理后台'
  */
 export const routes: RouteRecordRaw[] = [
   // ===== 不使用后台布局的页面 =====
-  // W-03 在这里添加登录页：{ path: '/login', name: 'Login', component: ..., meta: { title: '登录' } }
+  // 是否需要登录由守卫按路径判断：登录页不需要；改密码页需要登录，须先改密码时只能停在这里
+  {
+    path: LOGIN_PATH,
+    name: 'Login',
+    component: () => import('@/views/login/LoginView.vue'),
+    meta: { title: '登录' },
+  },
+  {
+    path: CHANGE_PASSWORD_PATH,
+    name: 'ChangePassword',
+    component: () => import('@/views/login/ChangePasswordView.vue'),
+    meta: { title: '修改密码' },
+  },
 
   // ===== 需要登录、使用后台布局的页面 =====
   {
@@ -32,9 +44,10 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
 
-  // TODO(W-03)：添加登录页后再加兜底路由 { path: '/:pathMatch(.*)*', redirect: HOME_PATH }。
-  // 兜底路由优先级最低，只匹配其他路由都匹配不到的路径，放在哪里都可以。
-  // 不能在登录页之前加：否则 /login 会被它重定向到 /，再被守卫重定向回 /login，陷入循环。
+  // 兜底：不存在的路径回到首页（未登录时再由守卫转到登录页）。
+  // 优先级最低，只匹配其他路由都匹配不到的路径。登录页必须在路由表中，
+  // 否则 /login 会被它重定向到 /，再被守卫重定向回 /login，陷入循环。
+  { path: '/:pathMatch(.*)*', redirect: HOME_PATH },
 ]
 
 const router = createRouter({

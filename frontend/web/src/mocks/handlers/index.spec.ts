@@ -43,21 +43,11 @@ describe('MSW handler 汇总', () => {
     expect(JSON.stringify(body)).not.toMatch(/hidden|__test__/)
   })
 
-  // TODO(W-03)：登录状态的模拟移到 handlers/auth.ts 后，这个用例随之移走。
-  it('/me 返回已登录状态；退出登录后返回 NEED_LOGIN', async () => {
+  // 登录相关接口的模拟规则见 auth.spec.ts，这里只确认已注册在兜底之前
+  it('登录相关接口已注册，不落入兜底', async () => {
     const me = await fetch(`${baseURL}/me`)
-    expect(me.status).toBe(200)
-    expect(await me.json()).toMatchObject({
-      ok: true,
-      data: { admin: { mustChangePassword: false } },
-    })
-
-    const logout = await fetch(`${baseURL}/logout`, { method: 'POST' })
-    expect(await logout.json()).toEqual({ ok: true, data: null })
-
-    const after = await fetch(`${baseURL}/me`)
-    expect(after.status).toBe(401)
-    expect(await after.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    expect(me.status).toBe(401)
+    expect(await me.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
   })
 
   // 中文：后续模块可优先匹配；无输入/输出，只增加本例测试 handler。

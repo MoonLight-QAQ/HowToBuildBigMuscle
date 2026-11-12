@@ -46,6 +46,9 @@ export const CLIENT_ERROR_MESSAGES: Record<Exclude<ErrorKind, 'business'>, strin
 /** /logout 失败且不能确认会话已结束时的提示（网络错误、超时、5xx 等） */
 export const LOGOUT_UNCONFIRMED_MESSAGE = '退出失败，登录可能仍然有效，请检查网络后重试'
 
+/** 改密码时旧密码错误（BAD_PASSWORD）的提示。登录时同一个错误码提示「账号或密码错误」 */
+export const OLD_PASSWORD_WRONG_MESSAGE = '旧密码错误'
+
 /** 按错误码返回安全文案，未知码使用通用提示。 / Map a code to safe text; unknown codes use a fallback.
  * 参数/Params: 服务端 code。返回/Returns: 中文文案，无副作用 / Chinese text, no side effects.
  */

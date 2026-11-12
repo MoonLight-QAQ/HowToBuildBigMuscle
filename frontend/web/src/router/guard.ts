@@ -27,7 +27,7 @@ function isSamePath(path: string, expected: string): boolean {
 
 /**
  * 判断一个路径是否是登录页。
- * TODO(W-03)：登录路由有了 name 之后，可以改为按路由名判断。
+ * 按路径而不是路由名判断：getRedirectPath 拿到的 redirect 只是字符串，没有对应的路由对象。
  */
 export function isLoginPath(path: string): boolean {
   return isSamePath(path, LOGIN_PATH)
