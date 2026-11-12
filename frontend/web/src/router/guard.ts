@@ -3,17 +3,39 @@ import type { RouteLocationNormalized, RouteLocationRaw, Router } from 'vue-rout
 /** 登录页路径。登录页本身由 W-03 在路由表中添加。 */
 export const LOGIN_PATH = '/login'
 
+/** 改密码页路径。页面本身由 W-03 在路由表中添加。 */
+export const CHANGE_PASSWORD_PATH = '/change-password'
+
 /** 登录后默认进入的页面 */
 export const HOME_PATH = '/'
 
+/** 守卫判断所需的登录状态 */
+export interface SessionState {
+  isLoggedIn: boolean
+  /** 为 true 时只能停留在改密码页（和登录页） */
+  mustChangePassword: boolean
+}
+
+/**
+ * 比较路径前先规范化。
+ * Vue Router 默认不区分末尾斜杠和大小写，/login/、/Login 也会显示登录页，
+ * 所以比较前先去掉末尾斜杠并转为小写，不能直接用 ===。
+ */
+function isSamePath(path: string, expected: string): boolean {
+  return path.replace(/\/+$/, '').toLowerCase() === expected
+}
+
 /**
  * 判断一个路径是否是登录页。
- * Vue Router 默认不区分末尾斜杠和大小写，/login/、/Login 也会显示登录页，
- * 所以比较前先去掉末尾斜杠并转为小写，不能直接用 === LOGIN_PATH。
  * TODO(W-03)：登录路由有了 name 之后，可以改为按路由名判断。
  */
 export function isLoginPath(path: string): boolean {
-  return path.replace(/\/+$/, '').toLowerCase() === LOGIN_PATH
+  return isSamePath(path, LOGIN_PATH)
+}
+
+/** 判断一个路径是否是改密码页，规则同 isLoginPath */
+export function isChangePasswordPath(path: string): boolean {
+  return isSamePath(path, CHANGE_PASSWORD_PATH)
 }
 
 /**
@@ -50,9 +72,9 @@ function hasDotSegment(path: string): boolean {
  */
 export function resolveNavigation(
   to: Pick<RouteLocationNormalized, 'path' | 'fullPath' | 'meta' | 'query'>,
-  isLoggedIn: boolean,
+  { isLoggedIn, mustChangePassword }: SessionState,
 ): true | RouteLocationRaw {
-  // 已登录时再打开登录页，直接回到原本要去的页面
+  // 已登录时再打开登录页，直接回到原本要去的页面（须改密码时，下一次导航再转到改密码页）
   if (isLoginPath(to.path)) {
     return isLoggedIn ? getRedirectPath(to.query.redirect) : true
   }
@@ -63,13 +85,22 @@ export function resolveNavigation(
     return { path: LOGIN_PATH, query: { redirect: to.fullPath } }
   }
 
+  // 首次登录须先改密码：除改密码页外一律跳转过去
+  if (mustChangePassword && !isChangePasswordPath(to.path)) {
+    return CHANGE_PASSWORD_PATH
+  }
+
   return true
 }
 
 /**
  * 给路由注册登录守卫。
- * isLoggedIn 由调用方提供（登录状态的 store），守卫本身不依赖 store，便于测试。
+ * getSession 由调用方提供（登录状态的 store），守卫本身不依赖 store，便于测试。
+ * 刷新页面后要先请求 /me 才知道是否已登录，getSession 在确认之前不返回，守卫也就不会提前跳转。
  */
-export function setupAuthGuard(router: Router, isLoggedIn: () => boolean): void {
-  router.beforeEach((to) => resolveNavigation(to, isLoggedIn()))
+export function setupAuthGuard(
+  router: Router,
+  getSession: () => SessionState | Promise<SessionState>,
+): void {
+  router.beforeEach(async (to) => resolveNavigation(to, await getSession()))
 }
