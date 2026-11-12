@@ -30,25 +30,67 @@
 | `GET` | 查询，不改变任何数据 | `GET /orders` |
 | `POST` | 新增；执行动作 | `POST /products`、`POST /refunds/{id}/approve` |
 | `PUT` | 修改整个资源（请求中带全部可编辑字段） | `PUT /products/{id}` |
-| `DELETE` | 删除 | `DELETE /mall-categories/{id}` |
+| `DELETE` | 删除（一律软删除，见下文） | `DELETE /mall-categories/{id}` |
 
 不使用 `PATCH`。
+
+### 删除
+
+所有数据一律**软删除**，不做物理删除。
+
+- `DELETE` 接口只给数据打上删除标记，数据库中的记录保留。
+- 列表接口不返回已删除的数据。按 ID 访问已删除的资源，返回 `NOT_FOUND`。
+- 名称唯一等校验只在未删除的数据中进行，已删除数据的名称可以再次使用。
+- 其他数据引用了已删除的数据时（如已下架商品所属的类目），照常返回被引用数据的名称，不返回 `null`。
+- 新增或修改时，请求中引用了已删除的数据，返回 `VALIDATION_FAILED`。
+- 删除关联（如把 suburb 移出配送大区）同样是软删除，之后可以重新建立关联。
+
+### 数据库公共字段
+
+每张表都必须有以下五个字段。字段的具体类型和取值，在表设计阶段确定。
+
+| 字段 | 含义 | 接口中 |
+| --- | --- | --- |
+| `is_deleted` | 软删除标记 | 不返回 |
+| `create_time` | 创建时间 | 需要时返回为 `createdAt` |
+| `update_time` | 最后修改时间 | 需要时返回为 `updatedAt` |
+| `create_by` | 创建人 | 不返回 |
+| `update_by` | 最后修改人 | 不返回 |
+
+接口是否返回 `createdAt`、`updatedAt`，以字段清单为准。
 
 ## 3. 请求
 
 - 请求体和响应体都是 JSON，`Content-Type: application/json`。
 - 字段名用 **camelCase**。
 - 查询参数也用 camelCase：`GET /orders?status=pending&page=1`。
-- 不要相信前端传来的操作者身份、价格、库存。操作者以 token 为准，金额和库存以服务器计算为准。
+- 不要相信前端传来的操作者身份、价格、库存。操作者以服务器识别出的登录身份为准，金额和库存以服务器计算为准。
 
 ## 4. 鉴权
 
-- 除登录接口外，所有接口都要在请求头中带 token：
+管理端和小程序端的鉴权方式不同。管理员与顾客的登录凭证**互不通用**：用顾客的凭证调管理端接口，返回 `NEED_LOGIN`。
+
+### 管理端
+
+管理端用同域的 httpOnly cookie 保存通行证，前端代码读不到也不保存通行证。原因见 ADR 0006。
+
+- 登录成功时，服务器通过 `Set-Cookie` 下发通行证：
   ```http
-  Authorization: Bearer <token>
+  Set-Cookie: __Host-pickaus_admin=<通行证>; Path=/; Max-Age=<秒数>; HttpOnly; Secure; SameSite=Strict
   ```
-- 管理员 token 与顾客 token **互不通用**。用顾客 token 调管理端接口，返回 `NEED_LOGIN`。
-- 登录成功返回 `token` 和过期时间 `expiresAt`。token 过期或无效，返回 `NEED_LOGIN`，前端跳转登录页。
+  响应体只返回过期时间 `expiresAt` 和当前管理员 `admin`，不返回通行证。
+- 之后的请求由浏览器自动带上 cookie，前端不需要设置请求头。前端与接口必须同域（开发环境通过代理实现）。
+- 通行证保存在服务器端，最长 30 天，数值写在配置里。登出时作废当前通行证；改密码或停用账号时，作废该账号的所有通行证。
+- 通行证缺失、过期或已作废，返回 `NEED_LOGIN`，前端跳转登录页。
+- 前端读不到 cookie，打开后台时调用 `GET /me` 判断是否已登录。
+- 除 `GET` 外的请求，服务器检查 `Origin` 请求头是否为后台自己的域名。不一致返回 `FORBIDDEN`。
+- 第一版不分角色，所有账号都是管理员。
+- `mustChangePassword` 为 `true` 的管理员，除 `/login`、`/logout`、`/me`、`/password` 外的接口都返回 `PASSWORD_CHANGE_REQUIRED`。前端收到后跳转改密码页 `/change-password`。
+- 登录：同一账号加同一 IP，15 分钟内失败 5 次就暂时锁定，返回 `TOO_MANY_ATTEMPTS`（429），并带 `Retry-After` 响应头，值为还需等待的秒数。账号不存在时也计数。次数和时长写在配置里。
+
+### 小程序端
+
+以小程序契约为准。小程序没有浏览器 cookie，计划在请求头中带顾客 token：`Authorization: Bearer <token>`。
 
 ## 5. 响应格式
 
@@ -82,11 +124,12 @@
 | 状态码 | 场景 |
 | --- | --- |
 | `200` | 成功 |
-| `400` | 参数校验失败（`VALIDATION_FAILED`） |
-| `401` | 未登录或 token 失效（`NEED_LOGIN`） |
-| `403` | 已登录但没有权限（`FORBIDDEN`） |
+| `400` | 参数校验失败（`VALIDATION_FAILED`），或新密码不符合规则（`WEAK_PASSWORD`） |
+| `401` | 未登录或登录已失效（`NEED_LOGIN`） |
+| `403` | 已登录但没有权限（`FORBIDDEN`），或须先改密码（`PASSWORD_CHANGE_REQUIRED`） |
 | `404` | 资源不存在（`NOT_FOUND`） |
 | `409` | 业务规则不允许，例如状态已变化、名称重复、库存不足 |
+| `429` | 尝试次数过多（`TOO_MANY_ATTEMPTS`），带 `Retry-After` 响应头 |
 | `500` | 服务器内部错误（`INTERNAL_ERROR`） |
 
 前端以 `code` 为准判断错误类型，HTTP 状态码只作为辅助。
@@ -138,17 +181,18 @@
 | 日期 | `YYYY-MM-DD`，表示**城市当地**的日期 | `"2026-11-02"` | 线下订单的送达日期 |
 | 钟点 | `HH:mm`，24 小时制 | `"08:00"` | 送达时段的开始和结束钟点 |
 
-- 服务器统一返回 UTC 时间点。前端用 `src/utils/date.ts` 中的函数，按**城市时区**格式化显示（悉尼、墨尔本、堪培拉为 `Australia/Sydney`）。
+- 服务器统一返回 UTC 时间点。前端用 `src/utils/date.ts` 中的函数，按**城市时区**格式化显示（悉尼、堪培拉为 `Australia/Sydney`，墨尔本为 `Australia/Melbourne`）。城市的时区保存在城市的 `timezone` 字段中。
 - 澳洲有夏令时，前端和后端都不要写死时差。
 
 ### 双语字段
 
-- 商品、类目、城市、区、时段等数据有中英文两个版本，字段名后缀为 `Zh` 和 `En`：`nameZh`、`nameEn`。
+- 商品、类目、城市、配送大区、时段等数据有中英文两个版本，字段名后缀为 `Zh` 和 `En`：`nameZh`、`nameEn`。
 - 管理端新增和编辑时，两个都必填。
 
 ### 枚举
 
 - 枚举值用**小写英文加下划线**：`pending`、`admin_removed`。
+- 例外：州 `AustralianState` 使用澳洲邮政的标准大写缩写，如 `NSW`、`VIC`。这些缩写本身就是官方代码，与地图返回的值一致。
 - 显示文案由前端在 `src/constants/` 中定义，接口不返回枚举的中文。
 
 ### 空值
@@ -190,7 +234,7 @@
 | code | HTTP | 含义 |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | 参数校验失败，详情见 `details` |
-| `NEED_LOGIN` | 401 | 未登录，或 token 失效 |
+| `NEED_LOGIN` | 401 | 未登录，或登录已失效 |
 | `FORBIDDEN` | 403 | 没有权限 |
 | `NOT_FOUND` | 404 | 资源不存在 |
 | `INVALID_STATUS` | 409 | 当前状态不允许此操作（如对已完成的订单开始配送） |
@@ -201,11 +245,16 @@
 
 | code | HTTP | 含义 | 出处 |
 | --- | --- | --- | --- |
-| `BAD_PASSWORD` | 401 | 账号或密码错误。**不区分是账号错还是密码错** | PRD 第 3 节 |
-| `NAME_DUPLICATED` | 409 | 名称与已有数据重复（类目、城市、时段） | PRD 第 9、11、14 节 |
+| `BAD_PASSWORD` | 401 | 账号或密码错误。**不区分是账号错还是密码错**。改密码时旧密码错误也返回它 | PRD 第 3 节 |
+| `TOO_MANY_ATTEMPTS` | 429 | 尝试次数过多，带 `Retry-After` 响应头 | PRD 第 3 节、ADR 0006 |
+| `PASSWORD_CHANGE_REQUIRED` | 403 | 首次登录须先改密码 | PRD 第 3 节、ADR 0006 |
+| `WEAK_PASSWORD` | 400 | 新密码不符合规则（至少 12 位，不能是常见密码，不能与旧密码相同） | PRD 第 3 节、ADR 0006 |
+| `NAME_DUPLICATED` | 409 | 名称与已有数据重复（类目、城市、时段；配送大区在同一城市内不能重复） | PRD 第 9、11、14 节 |
 | `CATEGORY_IN_USE` | 409 | 类目下还有在售商品或在售帖子，不能删除 | PRD 第 9、14 节 |
 | `STOCK_BELOW_LOCKED` | 409 | 账面库存不能小于已锁定的件数 | PRD 第 8 节 |
 | `LAST_SLOT` | 409 | 至少要保留一个送达时段 | PRD 第 10 节 |
+| `SUBURB_IN_OTHER_ZONE` | 409 | suburb 已属于另一个配送大区，需要先移出 | ADR 0005 |
+| `SUBURB_STATE_MISMATCH` | 409 | suburb 所在的州与配送大区所属城市的州不一致 | ADR 0005 |
 | `LISTING_NOT_ON_SALE` | 409 | 帖子不是在售状态，不能强制下架 | PRD 第 13 节 |
 | `REFUND_PAYOUT_FAILED` | 502 | 真实渠道接入时的预留错误码，本轮 Mock 审核接口不返回。渠道失败由独立进度表达，不据此把已同意单退回待审；具体提交/重试策略待真实接入确定 | 退款字段清单 |
 | `UPLOAD_NOT_ALLOWED` | 400 | 申请上传地址时，图片类型或大小不符合要求【建议】 | — |

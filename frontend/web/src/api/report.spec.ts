@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { delay } from 'msw'
 import { http as mockHttp, HttpResponse, type HttpResponseResolver } from 'msw/http'
 import { setupServer } from 'msw/node'
-import { createReportMock, REPORT_MOCK_TOKENS } from '@/mocks/handlers/report'
+import { createReportMock, type ReportMockRole } from '@/mocks/handlers/report'
 import { createReportFixtures } from '@/mocks/data/report'
 import { http } from './http'
 import {
@@ -23,6 +23,16 @@ vi.mock('./http', async function configureClient(importOriginal) {
 })
 const baseURL = 'http://localhost:48132/api/admin'
 const server = setupServer()
+
+/** 返回隔离测试中的处理角色，无实际 Cookie 读写。 / Return the isolated reviewer role without reading or writing a real cookie. */
+function readReviewerRole(): ReportMockRole {
+  return 'reviewer'
+}
+
+/** 返回本例固定的会话代次，不访问实际登录状态。 / Return the fixed test session generation without consulting a real session. */
+function getSessionGeneration(): number {
+  return 1
+}
 /** 创建完整虚构举报，返回独立快照，无外部副作用。 / Create a fresh complete synthetic report without external effects. */
 function fixture(): Report {
   return {
@@ -357,23 +367,34 @@ it.each(['sold', 'self_removed', 'admin_removed'] as const)(
 it.each([
   { status: 401, code: 'NEED_LOGIN' },
   { status: 403, code: 'FORBIDDEN' },
+  { status: 403, code: 'PASSWORD_CHANGE_REQUIRED' },
   { status: 404, code: 'NOT_FOUND' },
   { status: 409, code: 'VERSION_CONFLICT' },
   { status: 409, code: 'INVALID_STATUS' },
   { status: 500, code: 'INTERNAL_ERROR' },
-])('preserves $code without retry', async function testErrors({ status, code }) {
-  let calls = 0
-  /** 返回指定契约错误并计数，避免真实流量。 / Return the declared error and count requests without real traffic. */
-  function failure(): Response {
-    calls += 1
-    return HttpResponse.json({ ok: false, code, message: 'synthetic error' }, { status })
-  }
-  server.use(mockHttp.post(`${baseURL}/reports/:id/ignore`, failure))
-  await expect(
-    reportApi.ignore(fixture().id, { version: 7, expectedStatus: 'open' }),
-  ).rejects.toMatchObject({ kind: 'business', status, code })
-  expect(calls).toBe(1)
-})
+])(
+  'preserves $code without retry and notifies the matching session flow',
+  async function testErrors({ status, code }) {
+    const onNeedLogin = vi.fn()
+    const onPasswordChangeRequired = vi.fn()
+    http.setAuth({ getSessionGeneration, onNeedLogin, onPasswordChangeRequired })
+    let calls = 0
+    /** 返回指定契约错误并计数，避免真实流量。 / Return the declared error and count requests without real traffic. */
+    function failure(): Response {
+      calls += 1
+      return HttpResponse.json({ ok: false, code, message: 'synthetic error' }, { status })
+    }
+    server.use(mockHttp.post(`${baseURL}/reports/:id/ignore`, failure))
+    await expect(
+      reportApi.ignore(fixture().id, { version: 7, expectedStatus: 'open' }),
+    ).rejects.toMatchObject({ kind: 'business', status, code })
+    expect(calls).toBe(1)
+    expect(onNeedLogin).toHaveBeenCalledTimes(code === 'NEED_LOGIN' ? 1 : 0)
+    expect(onPasswordChangeRequired).toHaveBeenCalledTimes(
+      code === 'PASSWORD_CHANGE_REQUIRED' ? 1 : 0,
+    )
+  },
+)
 /** 取消读取由HttpClient分类，不得返回空列表或成功。 / Canceled reads retain the client classification instead of becoming empty success. */
 it('forwards cancellation to the real client', async function testCancellation() {
   /** 延迟测试响应以验证取消，不访问真实后端。 / Delay the test response to verify cancellation without a real backend. */
@@ -389,15 +410,8 @@ it('forwards cancellation to the real client', async function testCancellation()
 })
 /** 默认Mock与真实API逐条往返，校验完整快照和两个写分支。 / Roundtrip every default Mock through the real API, including both write branches. */
 it('roundtrips default mock reads, ignore, on-sale takedown and off-sale closure', async function testDefaultMock() {
-  const mock = createReportMock({ baseURL })
+  const mock = createReportMock({ baseURL, readSessionRole: readReviewerRole })
   server.use(...mock.handlers)
-  /** 返回合成管理员token，不读取真实会话。 / Return a synthetic reviewer token without reading a real session. */
-  function getToken(): string {
-    return REPORT_MOCK_TOKENS.reviewer
-  }
-  /** 测试中无需登录导航，保持无副作用。 / Omit login navigation in this isolated test. */
-  function onNeedLogin(): void {}
-  http.setAuth({ getToken, onNeedLogin })
   const fixtures = createReportFixtures()
   expect((await reportApi.list()).total).toBe(fixtures.length)
   for (const report of fixtures)

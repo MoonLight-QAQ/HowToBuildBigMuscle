@@ -10,16 +10,19 @@ import {
 type Report = components['schemas']['Report']
 type ResolverInput = Parameters<HttpResponseResolver>[0]
 type Body = Record<string, unknown>
-export const REPORT_MOCK_TOKENS = {
+export const REPORT_MOCK_COOKIE = '__Host-pickaus_admin'
+export const REPORT_MOCK_SESSIONS = {
   reviewer: 'mock-report-reviewer',
   readonly: 'mock-report-readonly',
   denied: 'mock-report-denied',
 } as const
+export type ReportMockRole = keyof typeof REPORT_MOCK_SESSIONS
 export type ReportMockOptions = {
   baseURL?: string
   reports?: readonly Report[]
   listings?: readonly ReportMockListing[]
   deletedReportIds?: readonly string[]
+  readSessionRole?: () => ReportMockRole | null
 }
 
 /** 返回不回显请求资料的契约错误；输入定义和HTTP状态，无状态修改。 / Return a safe contract error by definition/status without request disclosure or mutation. */
@@ -29,15 +32,19 @@ function fail(error: ErrorDefinition, status: number): Response {
     { status },
   )
 }
-/** 验证合成管理员权限；只读身份不能写，失败前不读取业务记录。 / Authorize synthetic admins before business reads; read-only identities cannot write. */
-function authorize(request: Request, write = false): Response | undefined {
-  const token = request.headers.get('authorization')
-  if (token === `Bearer ${REPORT_MOCK_TOKENS.reviewer}`) return undefined
-  if (token === `Bearer ${REPORT_MOCK_TOKENS.readonly}`)
-    return write ? fail(ERROR_CODE.FORBIDDEN, 403) : undefined
-  return token === `Bearer ${REPORT_MOCK_TOKENS.denied}`
-    ? fail(ERROR_CODE.FORBIDDEN, 403)
-    : fail(ERROR_CODE.NEED_LOGIN, 401)
+/** 仅从模拟请求的管理端 Cookie 识别角色，缺失或未知会话返回 null。 / Resolve a synthetic role from the admin request cookie, or null for missing or unknown sessions. */
+function readCookieRole(cookies: ResolverInput['cookies']): ReportMockRole | null {
+  const session = cookies[REPORT_MOCK_COOKIE]
+  if (session === REPORT_MOCK_SESSIONS.reviewer) return 'reviewer'
+  if (session === REPORT_MOCK_SESSIONS.readonly) return 'readonly'
+  if (session === REPORT_MOCK_SESSIONS.denied) return 'denied'
+  return null
+}
+/** 验证合成角色的读写权限，失败返回契约错误。 / Authorize synthetic read or write access and return a contract error on denial. */
+function authorize(role: ReportMockRole | null, write = false): Response | undefined {
+  if (role === 'reviewer') return undefined
+  if (role === 'readonly') return write ? fail(ERROR_CODE.FORBIDDEN, 403) : undefined
+  return role === 'denied' ? fail(ERROR_CODE.FORBIDDEN, 403) : fail(ERROR_CODE.NEED_LOGIN, 401)
 }
 /** 校验查询白名单及重复字段；返回布尔，不改变记录。 / Validate allowed and unique query keys without changing records. */
 function validQuery(url: URL, allowed: readonly string[]): boolean {
@@ -106,14 +113,25 @@ function validReason(reason: unknown): reason is string {
 }
 /** 创建独立举报和帖子状态仓库，只有内存测试端口，没有公开控制接口。 / Create isolated report/listing state with in-memory test ports and no public control endpoint. */
 export function createReportMock(options: ReportMockOptions = {}) {
-  const baseURL = options.baseURL ?? import.meta.env.VITE_API_BASE_URL
-  const seeds = structuredClone(options.reports ?? createReportFixtures())
+  const {
+    baseURL = import.meta.env.VITE_API_BASE_URL,
+    reports: reportFixtures = createReportFixtures(),
+    listings: listingFixtures,
+    deletedReportIds,
+    readSessionRole,
+  } = options
+  const seeds = structuredClone(reportFixtures)
   const reports = new Map<string, Report>()
   const listings = new Map<string, ReportMockListing>()
-  const deleted = new Set(options.deletedReportIds ?? [])
+  const deleted = new Set(deletedReportIds ?? [])
   for (const report of seeds) reports.set(report.id, report)
-  for (const listing of structuredClone(options.listings ?? createReportListingFixtures(seeds)))
+  for (const listing of structuredClone(listingFixtures ?? createReportListingFixtures(seeds)))
     listings.set(listing.id, listing)
+  /** 从宿主模拟会话或请求 Cookie 解析权限，拒绝时不访问举报和帖子。 / Check the host Mock session or request cookie before accessing reports or listings. */
+  function checkAccess(input: ResolverInput, write = false): Response | undefined {
+    const role = readSessionRole ? readSessionRole() : readCookieRole(input.cookies)
+    return authorize(role, write)
+  }
   /** 生成当前只读投影，排除私有字段并清空已删除评论正文；不更新已浏览。 / Project current state, omitting private fields and deleted comment text without marking seen. */
   function project(report: Report): Report | undefined {
     const listing = listings.get(report.listing.id)
@@ -151,10 +169,10 @@ export function createReportMock(options: ReportMockOptions = {}) {
     })
   }
   /** 分页读取当前举报投影；不下架帖子、不修改浏览标记。 / Read current report projections with pagination without removing or marking listings seen. */
-  function listReports({ request }: ResolverInput): Response {
-    const denied = authorize(request)
+  function listReports(input: ResolverInput): Response {
+    const denied = checkAccess(input)
     if (denied) return denied
-    const url = new URL(request.url)
+    const url = new URL(input.request.url)
     const page = pageValue(url.searchParams.get('page'), 1),
       pageSize = pageValue(url.searchParams.get('pageSize'), 20, 100)
     const status = url.searchParams.get('status')
@@ -186,7 +204,7 @@ export function createReportMock(options: ReportMockOptions = {}) {
   }
   /** 读取单个举报当前投影；不存在或逻辑删除时返回404，不改变内容。 / Read one current report or 404 for absent/logically deleted data without mutation. */
   function getReport(input: ResolverInput): Response {
-    const denied = authorize(input.request)
+    const denied = checkAccess(input)
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const report = reports.get(input.params.id),
@@ -197,7 +215,7 @@ export function createReportMock(options: ReportMockOptions = {}) {
   }
   /** 验证后一次性提交举报与适用的帖子更新；失败无半写，不更新内容或浏览版本。 / Commit report and applicable listing updates atomically after validation, without content/seen changes. */
   async function review(input: ResolverInput, takedown: boolean): Promise<Response> {
-    const denied = authorize(input.request, true)
+    const denied = checkAccess(input, true)
     if (denied) return denied
     if (!validResource(input)) return fail(ERROR_CODE.VALIDATION_FAILED, 400)
     const body = await readBody(input.request)
@@ -286,6 +304,3 @@ export function createReportMock(options: ReportMockOptions = {}) {
   ]
   return { handlers, inspectReport, inspectListing, updateListing }
 }
-
-export const reportMock = createReportMock()
-export const reportHandlers = reportMock.handlers

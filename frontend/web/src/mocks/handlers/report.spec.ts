@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
 import { setupServer } from 'msw/node'
 import { createReportFixtures, createReportListingFixtures } from '@/mocks/data/report'
-import { createReportMock, REPORT_MOCK_TOKENS } from './report'
+import { createReportMock, REPORT_MOCK_COOKIE, REPORT_MOCK_SESSIONS } from './report'
 
 const baseURL = 'http://localhost:48232/api/admin'
 const reportId = '9000000000000000200'
@@ -27,12 +27,12 @@ afterAll(function stopServer() {
 async function request(
   path: string,
   body?: unknown,
-  token: string | null = REPORT_MOCK_TOKENS.reviewer,
+  session: string | null = REPORT_MOCK_SESSIONS.reviewer,
 ): Promise<Response> {
   return fetch(`${baseURL}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
-      ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
+      ...(session === null ? {} : { Cookie: `${REPORT_MOCK_COOKIE}=${session}` }),
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -105,37 +105,53 @@ it.each([
 
 /** 合成身份的读写权限分开，拒绝前不提交任何修改。 / Separate synthetic read/write permissions and refuse mutations before commit. */
 it.each([
-  { token: null, status: 401, code: 'NEED_LOGIN' },
-  { token: 'mock-customer', status: 401, code: 'NEED_LOGIN' },
-  { token: REPORT_MOCK_TOKENS.denied, status: 403, code: 'FORBIDDEN' },
+  { session: null, status: 401, code: 'NEED_LOGIN' },
+  { session: 'mock-customer', status: 401, code: 'NEED_LOGIN' },
+  { session: REPORT_MOCK_SESSIONS.denied, status: 403, code: 'FORBIDDEN' },
 ])(
   'rejects unauthorized $status identities before reads/writes',
-  async function testAuthorization({ token, status, code }) {
-    const before = mock.inspectReport(reportId)
+  async function testAuthorization({ session, status, code }) {
+    const beforeReport = mock.inspectReport(reportId)
+    const beforeListing = mock.inspectListing(listingId)
     for (const path of ['/reports', `/reports/${reportId}`])
-      await expectFailure(await request(path, undefined, token), status, code)
-    await expectFailure(await request(`/reports/${reportId}/ignore`, input(), token), status, code)
+      await expectFailure(await request(path, undefined, session), status, code)
+    await expectFailure(
+      await request(`/reports/${reportId}/ignore`, input(), session),
+      status,
+      code,
+    )
     await expectFailure(
       await request(
         `/reports/${reportId}/takedown`,
         input({ expectedListingStatus: 'on_sale', reason: '原因' }),
-        token,
+        session,
       ),
       status,
       code,
     )
-    expect(mock.inspectReport(reportId)).toEqual(before)
+    expect(mock.inspectReport(reportId)).toEqual(beforeReport)
+    expect(mock.inspectListing(listingId)).toEqual(beforeListing)
   },
 )
 
+/** 旧 Bearer 请求不能代替管理端 Cookie。 / Reject the legacy Bearer header as a replacement for the admin cookie. */
+it('rejects a legacy Bearer header without a session cookie', async function testLegacyBearer() {
+  const response = await fetch(`${baseURL}/reports`, {
+    headers: { Authorization: `Bearer ${REPORT_MOCK_SESSIONS.reviewer}` },
+  })
+  await expectFailure(response, 401, 'NEED_LOGIN')
+})
+
 /** 只读管理员可以读取，但两个写接口都不能提交。 / Allow reads for read-only admins while forbidding both write operations. */
 it('permits readonly reads while blocking every write', async function testReadonly() {
-  expect((await request('/reports', undefined, REPORT_MOCK_TOKENS.readonly)).status).toBe(200)
+  const beforeReport = mock.inspectReport(reportId)
+  const beforeListing = mock.inspectListing(listingId)
+  expect((await request('/reports', undefined, REPORT_MOCK_SESSIONS.readonly)).status).toBe(200)
   expect(
-    (await request(`/reports/${reportId}`, undefined, REPORT_MOCK_TOKENS.readonly)).status,
+    (await request(`/reports/${reportId}`, undefined, REPORT_MOCK_SESSIONS.readonly)).status,
   ).toBe(200)
   await expectFailure(
-    await request(`/reports/${reportId}/ignore`, input(), REPORT_MOCK_TOKENS.readonly),
+    await request(`/reports/${reportId}/ignore`, input(), REPORT_MOCK_SESSIONS.readonly),
     403,
     'FORBIDDEN',
   )
@@ -143,11 +159,13 @@ it('permits readonly reads while blocking every write', async function testReado
     await request(
       `/reports/${reportId}/takedown`,
       input({ expectedListingStatus: 'on_sale', reason: '原因' }),
-      REPORT_MOCK_TOKENS.readonly,
+      REPORT_MOCK_SESSIONS.readonly,
     ),
     403,
     'FORBIDDEN',
   )
+  expect(mock.inspectReport(reportId)).toEqual(beforeReport)
+  expect(mock.inspectListing(listingId)).toEqual(beforeListing)
 })
 
 /** 无效ID或额外资源查询返回400，合法但不存在的ID返回404。 / Distinguish malformed resources from missing valid IDs. */
@@ -298,7 +316,7 @@ it('rejects malformed JSON and extra ignore fields', async function testMalforme
   const response = await fetch(`${baseURL}/reports/${reportId}/ignore`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${REPORT_MOCK_TOKENS.reviewer}`,
+      Cookie: `${REPORT_MOCK_COOKIE}=${REPORT_MOCK_SESSIONS.reviewer}`,
       'Content-Type': 'application/json',
     },
     body: '{',

@@ -2,6 +2,7 @@ const IMG = "../miniprogram/images";
 
 const state = {
   toast: "",
+  mustChange: false,
   edit: null,
   fee: 600,
   postage: 800,
@@ -104,7 +105,8 @@ const rules = {
   listings: ["封面墙，像信息流一样扫。点进详情才算浏览，停在这面墙上不算。", "已浏览是全店一份。任一店员点开，其他店员都能看到标记，用来避开重复看。", "卖家改了标题、描述、图片、标价、可小议、成色、类目或城市后，标记去掉。评论、申请、已出、下架不去掉。", "落地灯是改过内容的例子，进来时没有已浏览。婴儿推车已经有人看过。"],
   listing: ["打开这一页就把当前内容记为已浏览。列表上的标记跟着出现。", "卖家改过内容再打开时，页内说明标记曾被清掉，这次重新记上。", "评论按时间正序，回复只有一层。", "能看到谁申请了、附言是什么。拒绝这一次之后买家还能再申请；「已拒绝此人」才是不能再申请。卖家的手机号和微信号不在账房展示，也不能替卖家点同意或拒绝。", "在售的帖子可以强制下架，原因卖家能看到。下架本身不会把已浏览清掉。"],
   "flea-cats": ["只给闲置用，和商城类目分开。", "删类目前，先确认没有在售帖子用着它。", "用户发布时只能选这里有的类目。"],
-  reports: ["举报的是帖子或某一楼评论。提交后内容先留着。", "处理方式只有两种：忽略，或强制下架整条帖子。", "下架评论的原型按「整条帖子下架」处理，避免新手做两套删除。正式环境可以只隐藏那一楼，规则写在服务端文档里。"]
+  "change-password": ["路由 /change-password。整页显示，不带侧栏菜单。", "首次登录（mustChangePassword 为 true）时直接跳到这里。改完之前，打开其他页面都会回到这里，接口返回 PASSWORD_CHANGE_REQUIRED。", "要先输入旧密码。旧密码错返回 BAD_PASSWORD，提示「旧密码错误」。", "新密码至少 12 位，不能是常见密码，不能和旧密码相同，否则返回 WEAK_PASSWORD。两次输入不一致由前端拦下，不发请求。", "改好之后，这个账号的所有登录都作废，包括当前这一个，要用新密码重新登录。", "平时也能从菜单「账号 › 修改密码」进来改密码。", "原型里旧密码填 wrong 可以看到「旧密码错误」的提示。"],
+  reports: ["举报的是帖子或某一楼评论。提交后内容先留着。","处理方式只有两种：忽略，或强制下架整条帖子。", "下架评论的原型按「整条帖子下架」处理，避免新手做两套删除。正式环境可以只隐藏那一楼，规则写在服务端文档里。"]
 };
 
 function h(value) {
@@ -204,6 +206,12 @@ function counts() {
 function nav() {
   const c = counts();
   const route = parse();
+  if (route.name === "change-password") {
+    document.getElementById("nav").innerHTML = `
+    <div class="brand"><small>STORE DESK</small><b>巷口账房</b><p>${state.mustChange ? "首次登录，先改密码才能用后台。" : "改完密码要重新登录。"}</p></div>
+    ${state.mustChange ? "" : `<button type="button" class="nav-btn" data-go="#/home"><span>返回后台</span></button>`}`;
+    return;
+  }
   const groups = [
     ["今天", [
       ["home", "概览", ""],
@@ -220,6 +228,9 @@ function nav() {
     ["闲置", [
       ["listings", "闲置浏览", ""],
       ["flea-cats", "闲置类目", ""]
+    ]],
+    ["账号", [
+      ["change-password", "修改密码", ""]
     ]]
   ];
   document.getElementById("nav").innerHTML = `
@@ -236,7 +247,7 @@ function ruleKey(route) {
 }
 function paintRules(route) {
   const key = ruleKey(route);
-  const title = { home: "概览", orders: "订单", order: "订单详情", refunds: "退款", refund: "退款单", products: "商品", product: route.id === "new" ? "新增商品" : "编辑商品", "mall-cats": "商城类目", delivery: "配送", cities: "城市", listings: "闲置浏览", listing: "查看帖子", "flea-cats": "闲置类目", reports: "举报" }[key] || "规则";
+  const title = { home: "概览", "change-password": "修改密码", orders: "订单", order: "订单详情", refunds: "退款", refund: "退款单", products: "商品", product: route.id === "new" ? "新增商品" : "编辑商品", "mall-cats": "商城类目", delivery: "配送", cities: "城市", listings: "闲置浏览", listing: "查看帖子", "flea-cats": "闲置类目", reports: "举报" }[key] || "规则";
   const points = rules[key] || [];
   document.getElementById("rules").innerHTML = `<p class="kicker">这一页要守的规则</p><h2>${h(title)}</h2><ol>${points.map((point) => `<li>${h(point)}</li>`).join("")}</ol>`;
 }
@@ -532,12 +543,32 @@ function renderReports() {
     ${open.length ? open.map((item) => `<section class="card"><h2>${h(item.target)} · ${h(item.title)}</h2><p class="hint">${h(item.who)} 在 ${h(item.time)} 举报「${h(item.reason)}」。${h(item.extra || "没有补充。")}</p><div class="row"><button type="button" class="ghost" data-action="ignore-report" data-id="${item.id}">忽略</button><button type="button" class="btn" data-action="report-takedown" data-id="${item.id}">强制下架这条帖子</button></div></section>`).join("") : `<section class="card"><p>没有待处理的举报。</p></section>`}`;
 }
 
+function renderChangePassword() {
+  const first = state.mustChange;
+  return `${head(first ? "先改密码" : "修改密码", first ? "这是首次登录。账号是初始化时给的密码，改完才能用后台。" : "改完之后，这个账号在所有电脑上的登录都会失效，要用新密码重新登录。")}
+    <section class="card" style="max-width:420px">
+      <label class="field">旧密码<input id="pw-old" type="password" autocomplete="current-password"></label>
+      <label class="field">新密码<input id="pw-new" type="password" autocomplete="new-password" placeholder="至少 12 位"></label>
+      <label class="field">再输一次新密码<input id="pw-again" type="password" autocomplete="new-password"></label>
+      <p class="hint">至少 12 位，不能是常见密码，不能和旧密码相同。建议用密码管理器生成，不要和其他网站共用。</p>
+      <button type="button" class="btn" data-action="change-password">改密码</button>
+    </section>
+    ${first ? "" : `<section class="card"><p class="hint">原型里可以模拟首次登录：之后打开其他页面都会回到这里。</p><button type="button" class="ghost" data-action="simulate-first-login">模拟首次登录</button></section>`}`;
+}
+
+const COMMON_PASSWORDS = ["123456789012", "password1234", "qwertyuiop12", "111111111111", "abcdefghijkl"];
+
 function render() {
+  if (state.mustChange && parse().name !== "change-password") {
+    location.hash = "#/change-password";
+    return;
+  }
   const route = parse();
   nav();
   paintRules(route);
   const body = {
     home: renderHome,
+    "change-password": renderChangePassword,
     orders: renderOrders,
     order: renderOrder,
     refunds: renderRefunds,
@@ -728,6 +759,22 @@ const actions = {
     if (state.listings.some((item) => item.cat === name && item.status === "在售")) return notify("还有在售帖子用这个类目，不能删");
     state.fleaCats = state.fleaCats.filter((item) => item !== name);
     notify("已删除");
+  },
+  "change-password"() {
+    const oldPw = document.getElementById("pw-old").value;
+    const newPw = document.getElementById("pw-new").value;
+    const again = document.getElementById("pw-again").value;
+    if (!oldPw) return notify("先输入旧密码");
+    if (oldPw === "wrong") return notify("旧密码错误");
+    if (newPw !== again) return notify("两次输入的新密码不一致");
+    if (newPw.length < 12 || COMMON_PASSWORDS.includes(newPw.toLowerCase()) || newPw === oldPw) return notify("新密码至少 12 位，且不能是常见密码或旧密码");
+    state.mustChange = false;
+    notify("密码已改。所有登录都已失效，请用新密码重新登录（原型直接回到概览）。");
+    go("#/home");
+  },
+  "simulate-first-login"() {
+    state.mustChange = true;
+    notify("已模拟首次登录：改完密码前，其他页面都打不开。");
   },
   "ignore-report"(el) {
     const item = state.reports.find((row) => row.id === el.dataset.id);
