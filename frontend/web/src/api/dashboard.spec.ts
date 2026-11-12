@@ -3,14 +3,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vite
 import { http as mockHttp, HttpResponse, type HttpResponseResolver } from 'msw/http'
 import { setupServer } from 'msw/node'
 import { createDashboardData } from '@/mocks/data/dashboard'
-import { createDashboardHandlers, DASHBOARD_MOCK_TOKENS } from '@/mocks/handlers/dashboard'
+import { createDashboardHandlers, type DashboardMockRole } from '@/mocks/handlers/dashboard'
 
 /** 创建提升后的合成客户端上下文；无真实凭据或网络副作用。 / Create hoisted synthetic client context without real credentials or network effects. */
 const context = vi.hoisted(function createContext() {
   return {
     baseURL: 'http://localhost:48235/api/admin',
-    token: 'mock-dashboard-reader' as string | null,
+    role: 'reader' as DashboardMockRole | null,
+    generation: 0,
     expired: 0,
+    passwordChanges: 0,
   }
 })
 
@@ -22,9 +24,13 @@ vi.mock('./http', async function isolateClient(importOriginal) {
     http: new actual.HttpClient({
       baseURL: context.baseURL,
       auth: {
-        /** 读取当前测试身份。 / Read the current synthetic test identity. */
-        getToken(): string | null {
-          return context.token
+        /** 读取当前测试会话代次。 / Read the current test session generation. */
+        getSessionGeneration(): number {
+          return context.generation
+        },
+        /** 记录改密通知，不导航。 / Record password-change notifications without navigation. */
+        onPasswordChangeRequired(): void {
+          context.passwordChanges += 1
         },
         /** 记录登录失效通知，不导航。 / Record expiry notifications without navigation. */
         onNeedLogin(): void {
@@ -95,11 +101,18 @@ function expectInvalid(value: unknown): void {
 function start(): void {
   server.listen({ onUnhandledFrame: 'error' })
 }
-/** 每例恢复合法身份与独立Mock。 / Restore authorized identity and isolated Mock per test. */
+/** 中文：为隔离交叉测试提供身份，不修改请求头。 English: Resolve the isolated test role without modifying request headers. */
+function readTestRole(): DashboardMockRole | null {
+  return context.role
+}
+
+/** 每例恢复合法身份与独立 Mock。 / Restore the authorized role and isolated Mock per test. */
 function reset(): void {
-  context.token = DASHBOARD_MOCK_TOKENS.reader
+  context.role = 'reader'
+  context.generation += 1
   context.expired = 0
-  server.use(...createDashboardHandlers(createDashboardData(), context.baseURL))
+  context.passwordChanges = 0
+  server.use(...createDashboardHandlers(createDashboardData(), context.baseURL, readTestRole))
 }
 /** 清除临时拦截规则。 / Remove temporary handlers. */
 function cleanup(): void {
@@ -258,17 +271,36 @@ it('返回独立对象与大区数组', function testCopy() {
 
 /** 授权失败保留错误语义，401通知登录适配器。 / Preserve authorization errors and notify the session adapter only for 401. */
 it.each([
-  { token: null, code: 'NEED_LOGIN', status: 401, expired: 1 },
-  { token: 'mock-customer', code: 'NEED_LOGIN', status: 401, expired: 1 },
-  { token: DASHBOARD_MOCK_TOKENS.denied, code: 'FORBIDDEN', status: 403, expired: 0 },
-])('权限错误 $code 不变成空概览', async function testAuthError(testCase) {
-  context.token = testCase.token
+  { role: null, code: 'NEED_LOGIN', status: 401, expired: 1 },
+  { role: 'denied', code: 'FORBIDDEN', status: 403, expired: 0 },
+] as const)('权限错误 $code 不变成空概览', async function testAuthError(testCase) {
+  context.role = testCase.role
   await expect(dashboardApi.get()).rejects.toMatchObject({
     kind: 'business',
     code: testCase.code,
     status: testCase.status,
   })
   expect(context.expired).toBe(testCase.expired)
+  expect(context.passwordChanges).toBe(0)
+})
+
+/** 中文：概览请求须先改密码时通知会话适配器，拒绝读取摘要。 English: Notify the session adapter on password-change requirements and reject summary reads. */
+it('须先改密码时保留 403 并通知改密流程', async function testPasswordChangeRequired() {
+  /** 中文：返回上游改密错误的模拟响应。 English: Return the upstream password-change error from Mock. */
+  function requirePasswordChange(): Response {
+    return HttpResponse.json(
+      { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+      { status: 403 },
+    )
+  }
+  server.use(mockHttp.get(summaryURL, requirePasswordChange))
+  await expect(dashboardApi.get()).rejects.toMatchObject({
+    kind: 'business',
+    code: 'PASSWORD_CHANGE_REQUIRED',
+    status: 403,
+  })
+  expect(context.passwordChanges).toBe(1)
+  expect(context.expired).toBe(0)
 })
 
 /** 服务失败保持失败，不返回假零值。 / Preserve server failure rather than returning false zeros. */

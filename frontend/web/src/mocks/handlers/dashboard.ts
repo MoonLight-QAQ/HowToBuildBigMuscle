@@ -8,10 +8,24 @@ import {
   type DashboardMockZone,
 } from '../data/dashboard'
 
-export const DASHBOARD_MOCK_TOKENS = {
+// 模拟服务端使用契约 Cookie 名和合成会话标识。 / Use the contract cookie name with synthetic Mock sessions.
+export const DASHBOARD_MOCK_COOKIE = '__Host-pickaus_admin'
+export const DASHBOARD_MOCK_SESSIONS = {
   reader: 'mock-dashboard-reader',
   denied: 'mock-dashboard-denied',
 } as const
+
+type ResolverInput = Parameters<HttpResponseResolver>[0]
+export type DashboardMockRole = keyof typeof DASHBOARD_MOCK_SESSIONS
+type ReadDashboardMockRole = (cookies: ResolverInput['cookies']) => DashboardMockRole | null
+
+/** 中文：读取模拟请求 Cookie，未知会话返回 null。 English: Read the Mock request cookie and return null for unknown sessions. */
+function readCookieRole(cookies: ResolverInput['cookies']): DashboardMockRole | null {
+  const session = cookies[DASHBOARD_MOCK_COOKIE]
+  if (session === DASHBOARD_MOCK_SESSIONS.reader) return 'reader'
+  if (session === DASHBOARD_MOCK_SESSIONS.denied) return 'denied'
+  return null
+}
 
 /** 判断大区是否至少有一个最终可送成员，空成员返回false。 / Check whether at least one member is deliverable, returning false for an empty zone. */
 function hasDeliverableMember(zone: DashboardMockZone): boolean {
@@ -75,16 +89,17 @@ function readSummary(source: DashboardMockData): components['schemas']['Summary'
   }
 }
 
-/** 创建独立GET拦截器；每次读取调用方持有的数据，授权前不读取摘要，无真实请求。 / Create isolated GET handlers reading caller-owned data per request, only after authorization. */
+/** 创建独立GET拦截器；按会话解析器授权后读取摘要，默认从模拟请求 Cookie 获取身份。 / Read the summary after resolving authorization, using Mock request cookies by default. */
 export function createDashboardHandlers(
   source: DashboardMockData = createDashboardData(),
   baseURL: string = import.meta.env.VITE_API_BASE_URL,
+  readRole: ReadDashboardMockRole = readCookieRole,
 ): HttpHandler[] {
   /** 校验合成身份并返回当前摘要；不回显身份，不写业务记录。 / Authorize a synthetic identity and return the current summary without credential echo or business writes. */
-  function getSummary({ request }: Parameters<HttpResponseResolver>[0]): Response {
-    const authorization = request.headers.get('authorization')
-    if (authorization !== `Bearer ${DASHBOARD_MOCK_TOKENS.reader}`) {
-      const forbidden = authorization === `Bearer ${DASHBOARD_MOCK_TOKENS.denied}`
+  function getSummary({ cookies }: ResolverInput): Response {
+    const role = readRole(cookies)
+    if (role !== 'reader') {
+      const forbidden = role === 'denied'
       const error = forbidden ? ERROR_CODE.FORBIDDEN : ERROR_CODE.NEED_LOGIN
       return HttpResponse.json<components['schemas']['ErrorResponse']>(
         { ok: false, code: error.code, message: error.message },
@@ -95,5 +110,3 @@ export function createDashboardHandlers(
   }
   return [http.get(`${baseURL}/summary`, getSummary)]
 }
-
-export const dashboardHandlers = createDashboardHandlers()

@@ -66,6 +66,7 @@ flowchart LR
 | W-01d | 通用组件与工具，以及它们的单元测试 | `src/components/`、`src/composables/`、`src/utils/` | @RealninX | W-01a |
 | W-01e | CI 流水线：前端检查、PR 来源分支检查、锁定目录检查、依赖更新 | 仓库根目录下的 `.github/workflows/`、`.github/dependabot.yml`、`.github/repo-settings/` | @MoonLight-QAQ | W-01a |
 | W-01f | 环境配置文档：`CONTRIBUTING.md` 和根目录 `README.md` 中 Node、pnpm 的安装方法与工程固定的版本对齐 | 仓库根目录下的 `CONTRIBUTING.md`、`README.md` 中与 Node、pnpm 有关的部分 | @MoonLight-QAQ | W-01a |
+| W-01h | 前端鉴权改用 cookie：去掉 `Authorization`，登录状态只存内存并通过 `/me` 恢复，`/logout`，`mustChangePassword` 跳转改密码页（[#68](https://github.com/MoonLight-QAQ/HowToBuildBigMuscle/issues/68)） | `src/api/http.ts`、`src/api/generated/`、`src/types/`、`src/constants/error-code.ts`、`src/stores/`、`src/router/guard.ts`、`src/router/index.ts`、`src/layouts/`、`src/main.ts`、`src/mocks/handlers/index.ts` 及相应测试 | @celine-hy | W-00f、W-01c |
 
 ## 三、业务模块
 

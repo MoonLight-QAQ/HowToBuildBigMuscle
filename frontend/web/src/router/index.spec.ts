@@ -15,7 +15,7 @@ function createAppRouter(isLoggedIn: boolean) {
     count += 1
     return count <= MAX_REDIRECTS
   })
-  setupAuthGuard(router, () => isLoggedIn)
+  setupAuthGuard(router, () => ({ isLoggedIn, mustChangePassword: false }))
   return router
 }
 

@@ -32,9 +32,7 @@ describe('MSW handler 汇总', () => {
   // 中文：未注册接口明确返回失败；无输入/输出，不触达实际后端。
   // English: Unregistered requests fail explicitly; no inputs/output, no real backend access.
   it('未注册的管理接口返回符合契约的 500', async () => {
-    const response = await fetch(`${baseURL}/__test__/missing?private=hidden`, {
-      headers: { Authorization: 'Bearer test-only' },
-    })
+    const response = await fetch(`${baseURL}/__test__/missing?private=hidden`)
     const body: components['schemas']['ErrorResponse'] = await response.json()
     expect(response.status).toBe(500)
     expect(body).toEqual({
@@ -42,7 +40,34 @@ describe('MSW handler 汇总', () => {
       code: 'INTERNAL_ERROR',
       message: '模拟接口尚未注册，请检查模块配置',
     })
-    expect(JSON.stringify(body)).not.toMatch(/hidden|test-only|__test__/)
+    expect(JSON.stringify(body)).not.toMatch(/hidden|__test__/)
+  })
+
+  /** 中文：验证概览注册与 /me 共用会话。 English: Verify that summary registration shares the /me session. */
+  it('/me 和概览共用会话，退出后都返回 NEED_LOGIN', async function testSharedSession() {
+    const me = await fetch(`${baseURL}/me`)
+    expect(me.status).toBe(200)
+    expect(await me.json()).toMatchObject({
+      ok: true,
+      data: { admin: { mustChangePassword: false } },
+    })
+
+    const summary = await fetch(`${baseURL}/summary`)
+    expect(summary.status).toBe(200)
+    expect(await summary.json()).toMatchObject({ ok: true, data: { pendingOrderCount: 2 } })
+
+    const logout = await fetch(`${baseURL}/logout`, { method: 'POST' })
+    expect(await logout.json()).toEqual({ ok: true, data: null })
+
+    const after = await fetch(`${baseURL}/me`)
+    expect(after.status).toBe(401)
+    expect(await after.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+
+    const denied = await fetch(`${baseURL}/summary`)
+    expect(denied.status).toBe(401)
+    const body: unknown = await denied.json()
+    expect(body).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    expect(body).not.toHaveProperty('data')
   })
 
   // 中文：后续模块可优先匹配；无输入/输出，只增加本例测试 handler。

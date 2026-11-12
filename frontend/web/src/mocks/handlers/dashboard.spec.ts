@@ -3,7 +3,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest'
 import { setupServer } from 'msw/node'
 import type { components } from '@/api/generated/admin'
 import { createDashboardData, type DashboardMockData } from '../data/dashboard'
-import { createDashboardHandlers, DASHBOARD_MOCK_TOKENS } from './dashboard'
+import {
+  createDashboardHandlers,
+  DASHBOARD_MOCK_COOKIE,
+  DASHBOARD_MOCK_SESSIONS,
+} from './dashboard'
 
 type Summary = components['schemas']['Summary']
 const baseURL = 'http://localhost:48236/api/admin'
@@ -11,8 +15,9 @@ const server = setupServer()
 let source: DashboardMockData
 
 /** 发出被MSW完全拦截的GET；返回响应，不触达真实后端。 / Send a fully intercepted GET and return its response without a real backend. */
-function getSummary(token: string | null = DASHBOARD_MOCK_TOKENS.reader): Promise<Response> {
-  return fetch(`${baseURL}/summary`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+function getSummary(session: string | null = DASHBOARD_MOCK_SESSIONS.reader): Promise<Response> {
+  const headers = session ? { Cookie: `${DASHBOARD_MOCK_COOKIE}=${session}` } : undefined
+  return fetch(`${baseURL}/summary`, { headers })
 }
 
 /** 拆出测试成功摘要，失败由断言报告。 / Unwrap a successful test summary, reporting failures through assertions. */
@@ -186,7 +191,7 @@ it.each([
   { token: null, status: 401, code: 'NEED_LOGIN' },
   { token: 'mock-customer', status: 401, code: 'NEED_LOGIN' },
   { token: 'unknown-token', status: 401, code: 'NEED_LOGIN' },
-  { token: DASHBOARD_MOCK_TOKENS.denied, status: 403, code: 'FORBIDDEN' },
+  { token: DASHBOARD_MOCK_SESSIONS.denied, status: 403, code: 'FORBIDDEN' },
 ])('身份 $token 返回 $status 且不读取数据', async function testAuthorization(testCase) {
   let reads = 0
   /** 记录不应发生的数据读取，读取时令测试失败。 / Count forbidden reads and throw if data is accessed. */
@@ -201,4 +206,15 @@ it.each([
   expect(body).toMatchObject({ ok: false, code: testCase.code })
   expect(body).not.toHaveProperty('data')
   expect(reads).toBe(0)
+})
+
+/** 中文：只有旧 Bearer 头时拒绝返回概览。 English: Reject summary access with only a legacy Bearer header. */
+it('只有旧 Bearer 头时返回 NEED_LOGIN', async function testBearerRetired() {
+  const response = await fetch(`${baseURL}/summary`, {
+    headers: { Authorization: `Bearer ${DASHBOARD_MOCK_SESSIONS.reader}` },
+  })
+  expect(response.status).toBe(401)
+  const body: unknown = await response.json()
+  expect(body).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+  expect(body).not.toHaveProperty('data')
 })
