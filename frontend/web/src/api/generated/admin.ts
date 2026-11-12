@@ -3067,8 +3067,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3099,8 +3101,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NAME_DUPLICATED（中文名或英文名与已有城市重复） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3136,8 +3140,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（城市不存在） */
             404: components["responses"]["NotFound"];
             /** @description NAME_DUPLICATED（中文名或英文名与其他城市重复） */
@@ -3177,8 +3183,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3210,8 +3218,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3242,8 +3252,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3279,8 +3291,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（大区不存在） */
             404: components["responses"]["NotFound"];
             /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
@@ -3314,8 +3328,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（大区不存在） */
             404: components["responses"]["NotFound"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3341,8 +3357,10 @@ export interface operations {
             200: components["responses"]["OkNoData"];
             /** @description VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（大区不存在） */
             404: components["responses"]["NotFound"];
             /** @description SUBURB_IN_OTHER_ZONE（有 suburb 已属于另一个配送大区）；SUBURB_STATE_MISMATCH（有 suburb 的州与大区所属城市的州不一致）。details 列出出错的 suburb */
@@ -3382,8 +3400,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
             404: components["responses"]["NotFound"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3405,8 +3425,10 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["OkNoData"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
             404: components["responses"]["NotFound"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3433,8 +3455,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3465,8 +3489,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3495,8 +3521,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3527,8 +3555,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NAME_DUPLICATED（中文名或英文名与已有时段重复） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3564,8 +3594,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（时段不存在） */
             404: components["responses"]["NotFound"];
             /** @description NAME_DUPLICATED（中文名或英文名与其他时段重复） */
@@ -3587,8 +3619,10 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["OkNoData"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（时段不存在） */
             404: components["responses"]["NotFound"];
             /** @description LAST_SLOT（这是最后一个时段，至少要保留一个） */
@@ -3619,8 +3653,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3651,8 +3687,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（名称为空或超长、出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NAME_DUPLICATED（中文名或英文名与已有商城类目重复） */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3672,8 +3710,10 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["OkNoData"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（类目不存在或已删除） */
             404: components["responses"]["NotFound"];
             /** @description CATEGORY_IN_USE（类目下还有已上架的商品） */
@@ -3715,8 +3755,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（分页参数不合法、categoryId 格式不对、displayStatus 不是有效的状态、keyword 为空或超长） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3747,8 +3789,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（必填字段缺失、超长；priceCents 不大于 0；stock 或 baseLikes 为负数或不是整数；图片为 0 张或超过 9 张、key 不是上传接口发出的；类目不存在或已删除；出现未定义的字段） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
@@ -3776,8 +3820,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（商品不存在） */
             404: components["responses"]["NotFound"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
@@ -3813,8 +3859,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（字段规则与 createProduct 相同；另外 version 缺失时也返回） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NOT_FOUND（商品不存在） */
             404: components["responses"]["NotFound"];
             /** @description VERSION_CONFLICT（提交的 version 已过期，商品已被他人修改。重新读取，不要盲目重试）；STOCK_BELOW_LOCKED（账面库存小于写入时的锁定量，如 message「账面库存不能小于已锁定的 3 件」，details 为 [{ field：stock，message：不能小于 3 }]） */
@@ -3849,8 +3897,10 @@ export interface operations {
             };
             /** @description VALIDATION_FAILED（字段缺失、类型不对、出现未定义的字段）；UPLOAD_NOT_ALLOWED（图片类型不是 JPG、PNG、WebP，或 size 超过 5MB） */
             400: components["responses"]["ValidationFailed"];
-            /** @description NEED_LOGIN（未登录，或 token 失效） */
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };

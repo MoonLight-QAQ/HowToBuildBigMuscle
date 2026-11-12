@@ -1236,7 +1236,10 @@ paths:
                           sort: 2
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -1298,7 +1301,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: NAME_DUPLICATED（中文名或英文名与已有城市重复）
@@ -1366,7 +1372,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（城市不存在）
@@ -1452,7 +1461,10 @@ paths:
           description: VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -1520,7 +1532,10 @@ paths:
           description: VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -1581,7 +1596,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复）
@@ -1650,7 +1668,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（大区不存在）
@@ -1722,7 +1743,10 @@ paths:
                       items: []
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（大区不存在）
@@ -1770,7 +1794,10 @@ paths:
           description: VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（大区不存在）
@@ -1845,7 +1872,10 @@ paths:
           description: VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
@@ -1866,7 +1896,10 @@ paths:
           $ref: '#/components/responses/OkNoData'
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（大区不存在，或 suburb 不在这个大区中）
@@ -1910,7 +1943,10 @@ paths:
                       version: 0
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -1969,7 +2005,10 @@ paths:
           description: VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试）
@@ -2026,7 +2065,10 @@ paths:
                           sort: 2
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -2085,7 +2127,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: NAME_DUPLICATED（中文名或英文名与已有时段重复）
@@ -2153,7 +2198,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（时段不存在）
@@ -2176,7 +2224,10 @@ paths:
           $ref: '#/components/responses/OkNoData'
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（时段不存在）
@@ -2235,7 +2286,10 @@ paths:
                           inUseCount: 0
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -2289,7 +2343,10 @@ paths:
           description: VALIDATION_FAILED（名称为空或超长、出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '409':
           $ref: '#/components/responses/Conflict'
           description: NAME_DUPLICATED（中文名或英文名与已有商城类目重复）
@@ -2316,7 +2373,10 @@ paths:
           $ref: '#/components/responses/OkNoData'
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（类目不存在或已删除）
@@ -2426,7 +2486,10 @@ paths:
           description: VALIDATION_FAILED（分页参数不合法、categoryId 格式不对、displayStatus 不是有效的状态、keyword 为空或超长）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -2517,7 +2580,10 @@ paths:
           description: VALIDATION_FAILED（必填字段缺失、超长；priceCents 不大于 0；stock 或 baseLikes 为负数或不是整数；图片为 0 张或超过 9 张、key 不是上传接口发出的；类目不存在或已删除；出现未定义的字段）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
@@ -2552,7 +2618,10 @@ paths:
                     data: *productExample
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（商品不存在）
@@ -2668,7 +2737,10 @@ paths:
           description: VALIDATION_FAILED（字段规则与 createProduct 相同；另外 version 缺失时也返回）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '404':
           $ref: '#/components/responses/NotFound'
           description: NOT_FOUND（商品不存在）
@@ -2747,7 +2819,10 @@ paths:
           description: VALIDATION_FAILED（字段缺失、类型不对、出现未定义的字段）；UPLOAD_NOT_ALLOWED（图片类型不是 JPG、PNG、WebP，或 size 超过 5MB）
         '401':
           $ref: '#/components/responses/NeedLogin'
-          description: NEED_LOGIN（未登录，或 token 失效）
+          description: NEED_LOGIN（未登录，或登录已失效）
+        '403':
+          $ref: '#/components/responses/PasswordChangeRequired'
+          description: PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名）
         '500':
           $ref: '#/components/responses/InternalError'
           description: INTERNAL_ERROR（服务器内部错误）
