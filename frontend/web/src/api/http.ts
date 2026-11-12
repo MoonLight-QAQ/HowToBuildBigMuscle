@@ -130,7 +130,8 @@ export class HttpClient {
       throw new ApiError('protocol')
     }
     const auth = this.auth
-    // 记下发请求时的会话代次，收到 NEED_LOGIN 时据此判断是否属于当前会话。 / Snapshot the session generation.
+    // 记下发请求时的会话代次，收到 NEED_LOGIN、PASSWORD_CHANGE_REQUIRED 时据此判断是否属于当前会话。
+    // Snapshot the session generation to ignore late responses from an earlier session.
     let generation: number | null
     try {
       generation = options.anonymous ? null : (auth?.getSessionGeneration() ?? null)
@@ -169,7 +170,7 @@ export class HttpClient {
         if (!options.anonymous) {
           if (body.code === ERROR_CODE.NEED_LOGIN.code) await this.notifyExpired(auth, generation)
           else if (body.code === ERROR_CODE.PASSWORD_CHANGE_REQUIRED.code)
-            await this.notifyPasswordChangeRequired(auth)
+            await this.notifyPasswordChangeRequired(auth, generation)
         }
         throw new ApiError(
           'business',
@@ -231,13 +232,20 @@ export class HttpClient {
     }
   }
 
-  /** 须先改密码时通知适配器跳转；未接入适配器时不处理。 / Ask the adapter to open the change-password page.
-   * 参数/Params: 请求时的适配器 / Adapter captured at dispatch.
+  /** 须先改密码时通知适配器跳转；只处理仍是当前会话的响应，未接入适配器时不处理。
+   * Ask the adapter to open the change-password page, only for the current session.
+   * 参数/Params: 请求时的适配器与会话代次快照 / Adapter and generation captured at dispatch.
    * 返回/Returns: void；可能导航，适配器失败不掩盖原始业务错误 / Navigation effects; preserve API failure.
    */
-  private async notifyPasswordChangeRequired(auth: AuthAdapter | null): Promise<void> {
+  private async notifyPasswordChangeRequired(
+    auth: AuthAdapter | null,
+    generation: number | null,
+  ): Promise<void> {
     try {
-      if (auth && auth === this.auth) await auth.onPasswordChangeRequired()
+      // 请求期间已退出或重新登录时，旧会话的响应不能把新会话标记为须改密码。
+      // A late response from an earlier session must not affect the new one.
+      if (!auth || auth !== this.auth || auth.getSessionGeneration() !== generation) return
+      await auth.onPasswordChangeRequired()
     } catch {
       // 同上，保留原始业务错误。 / Preserve the original business error.
     }

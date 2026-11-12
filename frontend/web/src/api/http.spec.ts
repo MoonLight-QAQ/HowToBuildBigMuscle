@@ -361,6 +361,41 @@ it('匿名请求的 PASSWORD_CHANGE_REQUIRED 不通知适配器', async function
 })
 
 /** 中文：改密码回调异常不掩盖请求失败。 English: Adapter exceptions must not replace the ApiError. */
+/** 中文：旧会话的晚到响应不得影响新会话。 English: A stale response must not flag a newer session. */
+it('旧会话的 PASSWORD_CHANGE_REQUIRED 不影响请求期间建立的新会话', async function testStalePasswordChange() {
+  /** 中文：收到旧请求时模拟重新登录，再返回失败。 English: Bumps the generation before a stale response. */
+  function staleFailure(): Response {
+    generation += 2
+    return HttpResponse.json(
+      { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+      { status: 403 },
+    )
+  }
+  server.use(mockHttp.get(fixtureURL, staleFailure))
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    kind: 'business',
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+  expect(passwordChangeCalls).toBe(0)
+})
+
+/** 中文：换了适配器后旧适配器不再收到通知。 English: A replaced adapter is not notified. */
+it('请求期间更换适配器时，PASSWORD_CHANGE_REQUIRED 不通知旧适配器', async function testReplacedAdapter() {
+  /** 中文：收到请求时移除适配器，再返回失败。 English: Removes the adapter before responding. */
+  function replaceThenFail(): Response {
+    client.setAuth(null)
+    return HttpResponse.json(
+      { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+      { status: 403 },
+    )
+  }
+  server.use(mockHttp.get(fixtureURL, replaceThenFail))
+  await expect(client.request('/__test', { parse: parseData })).rejects.toMatchObject({
+    code: 'PASSWORD_CHANGE_REQUIRED',
+  })
+  expect(passwordChangeCalls).toBe(0)
+})
+
 it('改密码回调异常不掩盖原业务错误', async function testFailingPasswordChangeAdapter() {
   authThrows = true
   server.use(

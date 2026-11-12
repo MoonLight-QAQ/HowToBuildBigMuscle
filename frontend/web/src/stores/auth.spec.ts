@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { http as mockHttp, HttpResponse } from 'msw/http'
+import { setupServer } from 'msw/node'
 import type { components } from '@/api/generated/admin'
-import { ApiError, http } from '@/api/http'
+import { ApiError, http, HttpClient } from '@/api/http'
 import { createAuthAdapter, isSessionActive, parseLoginResult, useAuthStore } from './auth'
 
 type LoginResult = components['schemas']['LoginResult']
@@ -269,5 +271,64 @@ describe('createAuthAdapter', () => {
     await adapter.onPasswordChangeRequired()
 
     expect(router.currentRoute.value.fullPath).toBe('/change-password?from=x')
+  })
+
+  describe('接入真实请求层', () => {
+    // 用页面同源地址，与正式环境一致，也避免 jsdom 的跨域检查
+    const baseURL = `${window.location.origin}/api/admin`
+    const server = setupServer()
+
+    beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+    afterEach(() => server.resetHandlers())
+    afterAll(() => server.close())
+
+    const passwordChangeRequired = () =>
+      HttpResponse.json(
+        { ok: false, code: 'PASSWORD_CHANGE_REQUIRED', message: '请先修改初始密码' },
+        { status: 403 },
+      )
+
+    it('当前会话收到 PASSWORD_CHANGE_REQUIRED 时，跳到改密码页', async () => {
+      const store = useAuthStore()
+      store.setSession(session)
+      const { router, adapter } = await setup('/orders/1')
+      const client = new HttpClient({ baseURL, auth: adapter })
+      server.use(mockHttp.get(`${baseURL}/orders`, passwordChangeRequired))
+
+      await expect(client.request('/orders', { parse: (data) => data })).rejects.toMatchObject({
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      })
+
+      expect(store.mustChangePassword).toBe(true)
+      expect(router.currentRoute.value.path).toBe('/change-password')
+    })
+
+    it('旧会话的请求在重新登录后才返回 PASSWORD_CHANGE_REQUIRED，不影响新会话', async () => {
+      const store = useAuthStore()
+      const oldSession: LoginResult = {
+        ...session,
+        expiresAt: '2099-01-01T00:00:00Z',
+        admin: { ...session.admin, mustChangePassword: true },
+      }
+      const newSession: LoginResult = { ...oldSession, admin: { ...session.admin } }
+      store.setSession(oldSession)
+      const { router, adapter } = await setup('/orders/1')
+      const client = new HttpClient({ baseURL, auth: adapter })
+      server.use(
+        mockHttp.get(`${baseURL}/orders`, () => {
+          // 请求还没返回时，用户退出并重新登录（新会话已改过密码）
+          store.clear()
+          store.setSession(newSession)
+          return passwordChangeRequired()
+        }),
+      )
+
+      await expect(client.request('/orders', { parse: (data) => data })).rejects.toMatchObject({
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      })
+
+      expect(store.mustChangePassword).toBe(false)
+      expect(router.currentRoute.value.path).toBe('/orders/1')
+    })
   })
 })
