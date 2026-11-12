@@ -76,7 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<LoginResult | null>(null)
   /** 是否已确认登录状态（/me 已返回，或已登录、已退出） */
   const confirmed = ref(false)
-  /** 会话代次：每次登录或清除时加 1，供请求层对 NEED_LOGIN 去重 */
+  /** 会话代次：每次登录或清除时加 1，供请求层忽略旧会话的 NEED_LOGIN、PASSWORD_CHANGE_REQUIRED，并对 NEED_LOGIN 去重 */
   const generation = ref(0)
   let confirming: Promise<void> | null = null
 

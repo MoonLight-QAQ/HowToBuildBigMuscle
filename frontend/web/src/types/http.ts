@@ -10,8 +10,10 @@ export type ErrorKind = 'business' | 'http' | 'network' | 'timeout' | 'canceled'
  */
 export interface AuthAdapter {
   /**
-   * 当前会话代次：每次登录或清除登录状态时加 1。请求层用它判断 NEED_LOGIN 是否属于当前会话、是否已通知过。
-   * Session generation, bumped on every login or clear; used to de-duplicate NEED_LOGIN.
+   * 当前会话代次：每次登录或清除登录状态时加 1。请求层用它判断 NEED_LOGIN、PASSWORD_CHANGE_REQUIRED
+   * 是否属于当前会话，并对 NEED_LOGIN 去重。
+   * Session generation, bumped on every login or clear; used to ignore stale NEED_LOGIN and
+   * PASSWORD_CHANGE_REQUIRED responses and to de-duplicate NEED_LOGIN.
    */
   getSessionGeneration(): number
   /** 清除失效登录并跳转登录页。 / Clear the expired session and navigate to login. */
