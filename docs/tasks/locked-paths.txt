@@ -55,3 +55,8 @@ frontend/web/src/stores/
 frontend/web/src/components/
 frontend/web/src/composables/
 frontend/web/src/utils/
+
+# W-00c B 的模块接口（#18）
+# 范围是 docs/api/admin.openapi.yaml 中的 B 区块，不是一个目录，所以不锁定整个文件：
+# 锁定会挡住 A、C 区块后续的修改。B 区块由文件头的区块规则（只在自己的区块内修改）
+# 和 CODEOWNERS 对 docs/ 的审查保护。修改 B 区块前，先和 @MoonLight-QAQ 沟通。

@@ -264,6 +264,515 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 城市列表
+         * @description 城市名单由商城和闲置共用。数量很少，不分页，按 sort 从小到大排序，sort 相同时按创建时间排序。
+         *     城市不能删除，所以总是返回全部城市。
+         */
+        get: operations["listCities"];
+        put?: never;
+        /**
+         * 新增城市
+         * @description - 中文名和英文名都必填，都不能与已有城市重复，否则返回 NAME_DUPLICATED。
+         *       只在未删除的城市中比较（城市目前不能删除，见字段清单）。
+         *     - fulfillment 不传时默认为 post（快递）。
+         *     - state 必填，**创建后不能修改**：它决定哪些 suburb 能加入这个城市的配送大区。
+         *     - timezone 必填，取 IANA 时区名。前端按州预填，由店员确认；服务器不按州推算时区，
+         *       因为州不能唯一确定时区（见 ADR 0005）。不是有效的 IANA 时区名时返回 VALIDATION_FAILED。
+         *     - 新城市没有配送大区，地址都会越界。线下和快递城市都需要再建配送大区、加入 suburb。
+         */
+        post: operations["createCity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改城市
+         * @description 修改城市的名称、配送方式、时区和排序。请求中带全部可编辑字段。
+         *     - 请求体**不包含 state**，州创建后不能修改：修改州会让已有的配送大区成员与城市的州不一致。
+         *       请求中出现 state 时返回 VALIDATION_FAILED。确实建错了州，只能新增一个城市。
+         *     - 名称不能与其他城市重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - 修改配送方式不影响已有的订单和闲置帖子，只影响之后的新订单：
+         *       改成线下后，按配送大区和成员的可送设置计算；改成快递后，只要求地址属于本市的大区，按快递邮费和包邮门槛计算。
+         *     - 城市不提供乐观锁（字段清单中城市没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateCity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/suburbs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 搜索 suburb 字典
+         * @description suburb 字典从澳洲官方数据导入，后台**只读**：不提供新增、修改、删除接口。
+         *     用于往配送大区里添加 suburb 时查找。
+         *     - keyword：全为数字时按邮编**前缀**匹配（如 `20` 匹配 2000～2099）；否则按名称做不区分大小写的包含匹配。不传时不按关键字过滤。
+         *     - state：按州筛选，不传时返回所有州。往大区添加时，前端一般传大区所属城市的州。
+         *     - 按 name、postcode 从小到大排序。
+         *     - 返回结果不表示 suburb 是否已属于某个大区；加入时由 addZoneSuburbs 校验。
+         */
+        get: operations["searchSuburbs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 某个城市的配送大区列表
+         * @description 返回一个城市的全部配送大区。数量很少，不分页，按 sort 从小到大排序。
+         *     - 线下城市和快递城市都有大区：大区圈定城市的服务范围，城市所有大区中的 suburb 就是这个城市的范围。
+         *     - deliverable、localFeeCents 只对线下订单生效；快递城市的大区只用于圈定范围，这两个字段照常返回，但不起作用。
+         *     - 大区不能删除，所以总是返回该城市的全部大区。
+         */
+        get: operations["listDeliveryZones"];
+        put?: never;
+        /**
+         * 新增配送大区
+         * @description - cityId 必填，**创建后不能修改**：修改会让大区成员与新城市的州不一致。城市不存在时返回 VALIDATION_FAILED。
+         *     - 中文名和英文名在**同一城市内**不能与其他大区重复，否则返回 NAME_DUPLICATED；不同城市可以同名。
+         *     - deliverable 是大区内 suburb 的默认可送设置；localFeeCents 为 null 时使用全店统一配送费，不为 null 时必须 ≥ 0。两者只对线下订单生效。
+         *     - 新大区没有成员，suburbCount 为 0，需要再用 addZoneSuburbs 加入 suburb。
+         *     - 只影响之后的新订单。
+         */
+        post: operations["createDeliveryZone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改配送大区
+         * @description 修改大区的名称、默认可送设置、运费和排序。请求中带全部可编辑字段。
+         *     - 请求体**不包含 cityId**，所属城市创建后不能修改；出现时返回 VALIDATION_FAILED。
+         *     - 名称在同一城市内不能与其他大区重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - 修改 deliverable 只改变**跟随大区**的成员（deliverableOverride 为 null）；单独设置过的成员不变。
+         *     - 只影响之后的新订单，已有订单使用下单时的地址和运费快照。
+         *     - 大区不能删除，不再使用时把其中的 suburb 移出。
+         *     - 配送大区不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateDeliveryZone"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}/suburbs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 配送大区的成员列表
+         * @description 返回大区内的全部 suburb，不分页，按 suburb 的 name、postcode 从小到大排序。
+         *     - deliverable 是**最终**可送：deliverableOverride 不为 null 时取它，否则取大区的 deliverable。
+         *     - localFeeCents 是**实际**的线下配送费：大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。
+         *     - 两个计算字段只对线下订单生效；快递城市的大区照常返回，但不起作用。
+         */
+        get: operations["listZoneSuburbs"];
+        put?: never;
+        /**
+         * 往配送大区加入 suburb
+         * @description 一次加入一个或多个 suburb，新成员的 deliverableOverride 为 null（跟随大区）。
+         *
+         *     **两条校验：**
+         *     1. 一个 suburb **最多属于一个**配送大区（包括其他城市的大区）。已属于另一个大区时返回 SUBURB_IN_OTHER_ZONE，需要先从原来的大区移出。
+         *     2. suburb 的 state 必须与大区所属城市的 state 一致，否则返回 SUBURB_STATE_MISMATCH。
+         *
+         *     **整批处理规则：**
+         *     - 整批**原子**处理：任何一个 suburb 不通过校验，整批都不加入。
+         *     - 出错时 details 列出每个出错的 suburb，field 为 `suburbIds[下标]`，如 `suburbIds[2]`。
+         *       同时有两种业务错误时，code 取 SUBURB_IN_OTHER_ZONE，details 中逐项写明原因。
+         *     - 已经在**本大区**的 suburb 直接跳过，不报错，可以重复提交。
+         *     - suburbIds 中有不存在的 suburb 时返回 VALIDATION_FAILED。
+         *     - 移出大区后，可以重新加入这个或其他大区。
+         *
+         *     只影响之后的新订单。成功后用 listZoneSuburbs 和 listDeliveryZones 重新读取成员和 suburbCount。
+         */
+        post: operations["addZoneSuburbs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-zones/{id}/suburbs/{suburbId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 单独设置成员是否可送
+         * @description 设置一个成员的 deliverableOverride：true 或 false 表示单独设置，null 表示恢复跟随大区。
+         *     - 只对线下订单生效。
+         *     - suburb 不在这个大区中时返回 NOT_FOUND。
+         *     - 只影响之后的新订单。
+         */
+        put: operations["updateZoneSuburb"];
+        post?: never;
+        /**
+         * 把 suburb 移出配送大区
+         * @description 只删除 suburb 与大区的**关联**（软删除），不影响字典中的 suburb，也不删除大区。
+         *     - 移出后，这个 suburb 不再属于该城市的范围：新地址越界，线下也不可送。已有订单使用下单时的快照，不受影响。
+         *     - 移出后可以重新加入这个或其他大区。
+         *     - suburb 不在这个大区中时返回 NOT_FOUND。
+         */
+        delete: operations["removeZoneSuburb"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查看配送费用
+         * @description 全店一份配置：线下统一配送费、快递邮费、包邮门槛。
+         *     - localFeeCents 在配送大区的 localFeeCents 为 null 时使用，只对线下订单生效。线下订单没有包邮。
+         *     - postFeeCents 和 freeShippingThresholdCents 只对快递订单生效：商品金额达到门槛时邮费为 0。
+         *     - 返回的 version 在修改时原样提交。
+         */
+        get: operations["getDeliveryFees"];
+        /**
+         * 修改配送费用
+         * @description 请求中带全部三个金额和读取到的 version。三个金额都是 ≥ 0 的整数，单位为分。
+         *
+         *     **乐观锁：**
+         *     - 提交 getDeliveryFees 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+         *     - 版本不一致（其他人在此期间改过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+         *       「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+         *     - 写入成功后 version 加 1，返回最新的配置。
+         *
+         *     只影响之后的新订单，已有订单使用下单时的运费快照。
+         */
+        put: operations["updateDeliveryFees"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 送达时段列表
+         * @description 时段每天共用，不绑定具体日期。返回全部时段，**包括已停用的**；不分页，按 sort 从小到大排序。
+         *     停用的时段，新的线下订单不能选。快递订单不选时段。
+         */
+        get: operations["listDeliverySlots"];
+        put?: never;
+        /**
+         * 新增送达时段
+         * @description - 中文名和英文名都必填，都不能与已有时段重复，否则返回 NAME_DUPLICATED。
+         *     - startTime、endTime 为 HH:mm 钟点，endTime 必须晚于 startTime，否则返回 VALIDATION_FAILED。不支持跨午夜的时段。
+         *     - 钟点按城市当地时间理解。订单上的开始和结束时间点，是下单时用所选日期、这个钟点和城市时区算出的 UTC 时间。
+         *     - 只影响之后的新订单。
+         */
+        post: operations["createDeliverySlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delivery-slots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改送达时段
+         * @description 修改名称、钟点、启用状态和排序。请求中带全部可编辑字段。停用和重新启用也通过本接口修改 enabled。
+         *     - 名称不能与其他时段重复（不和自己比较），否则返回 NAME_DUPLICATED。
+         *     - endTime 必须晚于 startTime。
+         *     - 停用后，新的线下订单不能选这个时段；停用最后一个启用中的时段不拦截（字段清单只规定删除时至少保留一个）。
+         *     - 只影响之后的新订单。已有订单的时段名称和开始、结束时间点是下单时的快照，不会改变。
+         *     - 时段不提供乐观锁（字段清单中没有 version），后保存的覆盖先保存的。
+         */
+        put: operations["updateDeliverySlot"];
+        post?: never;
+        /**
+         * 删除送达时段
+         * @description 软删除。已有订单的时段是下单时的快照，不受影响。
+         *     - 至少要保留一个时段（启用或停用的都算）。删除最后一个时返回 LAST_SLOT。
+         *     - 删除后名称可以再次使用。
+         */
+        delete: operations["deleteDeliverySlot"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mall-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 商城类目列表
+         * @description 只给商城用，和闲置类目是两个独立的对象和接口。数量很少，不分页，按 sort 从小到大排序。
+         *     不返回已删除的类目。
+         *     inUseCount 是这个类目下**已上架**的商品数（包括缺货的商品），大于 0 时前端禁用删除按钮。
+         */
+        get: operations["listMallCategories"];
+        put?: never;
+        /**
+         * 新增商城类目
+         * @description - 中文名和英文名都必填，都不能与未删除的商城类目重复，否则返回 NAME_DUPLICATED。
+         *       只和商城类目比较，不和闲置类目比较；已删除类目的名称可以再次使用。
+         *     - 类目只能新增和删除，**不能修改**，所以不提供修改接口。
+         *     - 新类目的 inUseCount 为 0。
+         */
+        post: operations["createMallCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mall-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 删除商城类目
+         * @description 软删除。只删除商城类目，不影响闲置类目。
+         *     - 这个类目下还有**已上架**的商品（包括缺货的商品，即 inUseCount 大于 0）时，返回 CATEGORY_IN_USE。
+         *       服务器在删除时重新统计，不以前端看到的 inUseCount 为准。
+         *     - 只有已下架商品的类目可以删除。删除后，这些商品的 categoryNameZh 照常返回原类目名；
+         *       再次编辑这些商品时，需要改选一个未删除的类目，否则返回 VALIDATION_FAILED。
+         *     - 删除后，类目不再出现在列表中，名称可以再次使用。
+         */
+        delete: operations["deleteMallCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 商品列表
+         * @description 分页返回商品，按 createdAt 从新到旧排序。每一行带账面、锁定、可售，都由服务器计算，前端不要用账面减锁定。
+         *     - categoryId：按商城类目筛选，不传时返回全部类目。
+         *     - displayStatus：按显示状态筛选（在售 / 缺货 / 已下架），不传时返回全部。
+         *     - keyword：同时匹配中文名和英文名，不区分大小写的包含匹配。不传时不按关键字过滤。
+         *     - 多个条件同时传时，取交集。
+         */
+        get: operations["listProducts"];
+        put?: never;
+        /**
+         * 新增商品
+         * @description - categoryId 只能选**未删除的商城类目**，类目不存在或已删除时返回 VALIDATION_FAILED。
+         *     - priceCents 必须大于 0。页面上按元输入，最多两位小数，提交前转换为分。
+         *     - stock 是账面库存，≥ 0 的整数。新商品的锁定量为 0，所以可售等于账面。
+         *     - baseLikes 是 ≥ 0 的整数，不是整数或为负数时返回 VALIDATION_FAILED。
+         *     - images 1～9 张，第一张是主图。key 必须来自 presignUpload（用途为 product）的返回，宽高由前端读取。
+         *     - 库存为 0 也可以上架，小程序显示缺货。
+         *     - 新商品的 version 为 0，销量为 0，点赞数等于基础点赞。
+         *     - 商品没有规格和评价。
+         */
+        post: operations["createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 查看商品
+         * @description 编辑页使用。返回商品的全部字段，以及当前的锁定和可售，用于在编辑页展示「有几件被待支付订单占用」。
+         *     返回的 version 在修改时原样提交。
+         */
+        get: operations["getProduct"];
+        /**
+         * 修改商品
+         * @description 请求中带全部可编辑字段和读取到的 version。字段规则与 createProduct 相同。
+         *
+         *     **入库：** 不单独提供入库接口。编辑页的「入库」由前端在当前账面上加一个正整数，
+         *     算出新的 stock 后随本接口一起提交；点保存才生效。直接改账面也是改 stock。
+         *
+         *     **乐观锁：**
+         *     - 提交 getProduct 返回的 version。服务器按「version 等于当前版本」原子地检查并写入。
+         *     - 版本不一致（其他店员在此期间保存过）时返回 VERSION_CONFLICT，**不写入任何字段**。前端提示
+         *       「数据已被他人修改，请刷新后重试」，重新读取后再由店员确认，不要自动用旧数据重试。
+         *     - 写入成功后 version 加 1，返回最新的商品。
+         *     - **所有改变账面 stock 的写入都推进同一个 version**：本接口的写入，以及小程序支付成功时的账面扣减
+         *       （与扣账面、加销量在同一事务内完成）。本接口提交的是绝对的 stock，扣减不推进 version 的话，
+         *       旧页面保存会把已扣掉的件数加回去。
+         *     - 只改变锁定量的动作（下单锁定、取消或超时释放）**不增加 version**，用户点赞的变化也不增加，
+         *       否则店员编辑期间每有一笔下单都会冲突。保存时仍按写入时的实时锁定量校验。
+         *     - 验收用例：读取商品得到 stock=20、version=2 → 支付成功扣减 3 件（stock=17、version=3）→
+         *       用 version=2 提交 stock=30，返回 VERSION_CONFLICT，账面仍为 17。
+         *
+         *     **库存校验：**
+         *     - stock 是 ≥ 0 的整数。
+         *     - 服务器在写入时取**当时**的锁定量比较，不以前端看到的 lockedQty 为准。stock 小于锁定量时返回
+         *       STOCK_BELOW_LOCKED，账面不变；message 和 details 写明锁定的件数，如「账面库存不能小于已锁定的 3 件」。
+         *     - 先检查 version，再检查库存：version 过期时只返回 VERSION_CONFLICT。
+         *
+         *     **其他：**
+         *     - categoryId 必须是未删除的商城类目。原类目已删除时，需要改选一个类目，否则返回 VALIDATION_FAILED。
+         *     - 修改价格只影响新订单，已有订单使用下单时的价格。
+         *     - 修改 baseLikes 不删除用户已有的点赞，likeCount 随之变化。
+         *     - 取消上架后，小程序的列表、搜索、详情购买都不可用；已有订单不受影响。
+         */
+        put: operations["updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploads/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 申请图片上传地址
+         * @description 图片由前端直接上传到 AWS S3，不经过后端中转。流程：
+         *     1. 调用本接口，告诉服务器图片的用途、类型和大小。
+         *     2. 服务器校验后返回有时效的预签名上传地址 uploadUrl 和对象 key。
+         *     3. 前端用 **PUT** 把文件上传到 uploadUrl。请求头 Content-Type 必须与申请时的 contentType 一致，
+         *        文件大小必须与 size 一致，否则 S3 拒绝上传。
+         *     4. 前端读取图片的宽高，把 `{ key, width, height }` 提交给业务接口（如 createProduct 的 images）。
+         *
+         *     **限制：**
+         *     - purpose 目前只有 product（商品图片）。
+         *     - contentType 只允许 image/jpeg、image/png、image/webp。
+         *     - size 为文件的字节数，不超过 5MB（5242880 字节）。
+         *
+         *     **错误码的区分：**
+         *     - 字段缺失、类型不对（如 size 不是整数）、出现未定义的字段：VALIDATION_FAILED。
+         *     - 字段齐全，但图片类型不在允许范围内，或 size 超过 5MB：UPLOAD_NOT_ALLOWED。
+         *       前端据此提示「只支持 JPG、PNG、WebP 格式，且不超过 5MB」。
+         *
+         *     **其他：**
+         *     - uploadUrl 在 expiresAt 之后失效，过期后重新申请。有效期由服务器决定，以 expiresAt 为准。
+         *     - key 由服务器生成，前端不要修改，也不要据此拼接图片地址；显示图片时使用业务接口返回的 url。
+         *     - 申请了地址但没有提交给业务接口的图片，由服务器另行清理，前端不需要处理。
+         */
+        post: operations["presignUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1166,6 +1675,573 @@ export interface components {
             expectedListingStatus: "sold" | "self_removed" | "admin_removed";
         };
         /**
+         * @description 城市。商城和闲置共用。城市不能删除
+         * @example {
+         *       "id": "1854239876543209472",
+         *       "nameZh": "悉尼",
+         *       "nameEn": "Sydney",
+         *       "fulfillment": "local",
+         *       "state": "NSW",
+         *       "timezone": "Australia/Sydney",
+         *       "sort": 1
+         *     }
+         */
+        City: {
+            readonly id: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description 所属州。创建后不能修改，用来校验哪些 suburb 能加入这个城市的配送大区 */
+            state: components["schemas"]["AustralianState"];
+            /** @description IANA 时区名，如 Australia/Sydney。前端按它格式化这个城市的时间 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 新增城市的请求体
+         * @example {
+         *       "nameZh": "布里斯班",
+         *       "nameEn": "Brisbane",
+         *       "fulfillment": "post",
+         *       "state": "QLD",
+         *       "timezone": "Australia/Brisbane",
+         *       "sort": 3
+         *     }
+         */
+        CityCreateInput: {
+            nameZh: string;
+            nameEn: string;
+            /**
+             * @description 不传时默认为 post（快递）
+             * @default post
+             */
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description 所属州。必填，创建后不能修改 */
+            state: components["schemas"]["AustralianState"];
+            /** @description IANA 时区名。前端按州预填（NSW、ACT 为 Australia/Sydney，VIC 为 Australia/Melbourne 等），由店员确认 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 修改城市的请求体。不包含 state，州创建后不能修改
+         * @example {
+         *       "nameZh": "悉尼",
+         *       "nameEn": "Sydney",
+         *       "fulfillment": "post",
+         *       "timezone": "Australia/Sydney",
+         *       "sort": 1
+         *     }
+         */
+        CityUpdateInput: {
+            nameZh: string;
+            nameEn: string;
+            fulfillment: components["schemas"]["Fulfillment"];
+            /** @description IANA 时区名 */
+            timezone: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description suburb 字典中的一项。从官方数据导入，后台只读。name + postcode + state 唯一；不包含城市
+         * @example {
+         *       "id": "1854239876543209500",
+         *       "name": "Leichhardt",
+         *       "postcode": "2040",
+         *       "state": "NSW"
+         *     }
+         */
+        Suburb: {
+            readonly id: components["schemas"]["Id"];
+            /** @description suburb 名称，如 Leichhardt */
+            readonly name: string;
+            /** @description 四位邮编，按字符串保存，保留开头的 0（如 0800） */
+            readonly postcode: string;
+            readonly state: components["schemas"]["AustralianState"];
+        };
+        /**
+         * @description suburb 搜索结果的分页
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "1854239876543209500",
+         *           "name": "Leichhardt",
+         *           "postcode": "2040",
+         *           "state": "NSW"
+         *         }
+         *       ],
+         *       "total": 1,
+         *       "page": 1,
+         *       "pageSize": 20
+         *     }
+         */
+        SuburbPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Suburb"][];
+        };
+        /**
+         * @description 配送大区。属于一个城市，圈定城市的服务范围；deliverable 和 localFeeCents 只对线下订单生效。大区不能删除
+         * @example {
+         *       "id": "1854239876543209480",
+         *       "cityId": "1854239876543209472",
+         *       "nameZh": "内西区",
+         *       "nameEn": "Inner West",
+         *       "deliverable": true,
+         *       "localFeeCents": null,
+         *       "sort": 1,
+         *       "suburbCount": 2
+         *     }
+         */
+        DeliveryZone: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 所属城市。创建后不能修改 */
+            cityId: components["schemas"]["Id"];
+            /** @description 同一城市内不能重复 */
+            nameZh: string;
+            /** @description 同一城市内不能重复 */
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置。只对线下订单生效 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费。为 null 时使用全店统一配送费。只对线下订单生效 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+            /** @description 大区内的 suburb 数 */
+            readonly suburbCount: number;
+        };
+        /**
+         * @description 新增配送大区的请求体
+         * @example {
+         *       "cityId": "1854239876543209472",
+         *       "nameZh": "东区",
+         *       "nameEn": "Eastern Suburbs",
+         *       "deliverable": true,
+         *       "localFeeCents": 800,
+         *       "sort": 3
+         *     }
+         */
+        DeliveryZoneCreateInput: {
+            /** @description 所属城市。创建后不能修改 */
+            cityId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 修改配送大区的请求体。不包含 cityId，所属城市创建后不能修改
+         * @example {
+         *       "nameZh": "帕拉马塔",
+         *       "nameEn": "Parramatta",
+         *       "deliverable": true,
+         *       "localFeeCents": null,
+         *       "sort": 2
+         *     }
+         */
+        DeliveryZoneUpdateInput: {
+            nameZh: string;
+            nameEn: string;
+            /** @description 大区内 suburb 的默认可送设置 */
+            deliverable: boolean;
+            /** @description 这个大区的线下配送费，≥ 0。传 null 表示使用全店统一配送费 */
+            localFeeCents: components["schemas"]["Cents"] | null;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 配送大区的成员，即 suburb 与大区的关联。移出大区只删除关联，不影响字典
+         * @example {
+         *       "suburb": {
+         *         "id": "1854239876543209500",
+         *         "name": "Leichhardt",
+         *         "postcode": "2040",
+         *         "state": "NSW"
+         *       },
+         *       "deliverableOverride": null,
+         *       "deliverable": true,
+         *       "localFeeCents": 600
+         *     }
+         */
+        ZoneSuburb: {
+            suburb: components["schemas"]["Suburb"];
+            /** @description 单独设置是否可送。为 null 时跟随大区 */
+            deliverableOverride: boolean | null;
+            /** @description 最终是否可送 = deliverableOverride 不为 null 时取它，否则取大区的 deliverable。只对线下订单生效 */
+            readonly deliverable: boolean;
+            /** @description 实际的线下配送费 = 大区的 localFeeCents 不为 null 时取它，否则取全店统一配送费。只对线下订单生效 */
+            readonly localFeeCents: components["schemas"]["Cents"];
+        };
+        /**
+         * @description 往配送大区加入 suburb 的请求体
+         * @example {
+         *       "suburbIds": [
+         *         "1854239876543209500",
+         *         "1854239876543209501"
+         *       ]
+         *     }
+         */
+        AddZoneSuburbsInput: {
+            /** @description 要加入的 suburb ID，1～100 个，不能重复 */
+            suburbIds: components["schemas"]["Id"][];
+        };
+        /**
+         * @description 单独设置成员是否可送的请求体
+         * @example {
+         *       "deliverableOverride": false
+         *     }
+         */
+        UpdateZoneSuburbInput: {
+            /** @description true 或 false 表示单独设置；null 表示恢复跟随大区 */
+            deliverableOverride: boolean | null;
+        };
+        /**
+         * @description 配送费用，全店一份。修改只影响之后的新订单
+         * @example {
+         *       "localFeeCents": 600,
+         *       "postFeeCents": 800,
+         *       "freeShippingThresholdCents": 5000,
+         *       "version": 0
+         *     }
+         */
+        DeliveryConfig: {
+            /** @description 全店统一线下配送费，默认 600。配送大区的 localFeeCents 为 null 时使用 */
+            localFeeCents: components["schemas"]["Cents"];
+            /** @description 快递邮费，默认 800 */
+            postFeeCents: components["schemas"]["Cents"];
+            /** @description 包邮门槛，默认 5000。只对快递订单生效 */
+            freeShippingThresholdCents: components["schemas"]["Cents"];
+            readonly version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 修改配送费用的请求体。version 原样提交读取到的值
+         * @example {
+         *       "localFeeCents": 600,
+         *       "postFeeCents": 800,
+         *       "freeShippingThresholdCents": 100,
+         *       "version": 0
+         *     }
+         */
+        DeliveryConfigInput: {
+            /** @description 全店统一线下配送费，≥ 0 */
+            localFeeCents: components["schemas"]["Cents"];
+            /** @description 快递邮费，≥ 0 */
+            postFeeCents: components["schemas"]["Cents"];
+            /** @description 包邮门槛，≥ 0 */
+            freeShippingThresholdCents: components["schemas"]["Cents"];
+            /** @description 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT */
+            version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 送达时段。每天共用，不绑定具体日期。钟点按城市当地时间理解
+         * @example {
+         *       "id": "1854239876543209520",
+         *       "nameZh": "上午",
+         *       "nameEn": "Morning",
+         *       "startTime": "08:00",
+         *       "endTime": "12:00",
+         *       "enabled": true,
+         *       "sort": 1
+         *     }
+         */
+        DeliverySlot: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 如「上午」 */
+            nameZh: string;
+            /** @description 如 Morning */
+            nameEn: string;
+            /** @description 开始钟点 */
+            startTime: components["schemas"]["ClockTime"];
+            /** @description 结束钟点，必须晚于开始钟点 */
+            endTime: components["schemas"]["ClockTime"];
+            /** @description 停用后，新的线下订单不能选 */
+            enabled: boolean;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 新增和修改送达时段的请求体
+         * @example {
+         *       "nameZh": "晚上",
+         *       "nameEn": "Evening",
+         *       "startTime": "18:00",
+         *       "endTime": "20:00",
+         *       "enabled": true,
+         *       "sort": 3
+         *     }
+         */
+        DeliverySlotInput: {
+            nameZh: string;
+            nameEn: string;
+            startTime: components["schemas"]["ClockTime"];
+            /** @description 必须晚于 startTime */
+            endTime: components["schemas"]["ClockTime"];
+            enabled: boolean;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 商城类目。与闲置类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改
+         * @example {
+         *       "id": "1854239876543209540",
+         *       "nameZh": "日用百货",
+         *       "nameEn": "Household",
+         *       "sort": 1,
+         *       "inUseCount": 12
+         *     }
+         */
+        MallCategory: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 不能与其他商城类目重复 */
+            nameZh: string;
+            /** @description 不能与其他商城类目重复 */
+            nameEn: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+            /** @description 这个类目下已上架的商品数（包括缺货的）。大于 0 时不能删除，前端据此禁用删除按钮 */
+            readonly inUseCount: number;
+        };
+        /**
+         * @description 新增商城类目的请求体
+         * @example {
+         *       "nameZh": "节日礼品",
+         *       "nameEn": "Festive Gifts",
+         *       "sort": 2
+         *     }
+         */
+        MallCategoryInput: {
+            nameZh: string;
+            nameEn: string;
+            /** @description 排序，越小越靠前 */
+            sort: number;
+        };
+        /**
+         * @description 商品显示状态，由服务器计算
+         *     - on_sale：在售。已上架，且可售数大于 0
+         *     - out_of_stock：缺货。已上架，但可售数为 0
+         *     - off_shelf：已下架。店员取消了上架
+         * @enum {string}
+         */
+        ProductDisplayStatus: "on_sale" | "out_of_stock" | "off_shelf";
+        /**
+         * @description 商品。没有规格和评价。列表和详情使用同一个结构
+         * @example {
+         *       "id": "1854239876543209560",
+         *       "categoryId": "1854239876543209540",
+         *       "categoryNameZh": "日用百货",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 20,
+         *       "lockedQty": 3,
+         *       "sellableQty": 17,
+         *       "salesCount": 58,
+         *       "baseLikes": 30,
+         *       "likeCount": 42,
+         *       "onShelf": true,
+         *       "displayStatus": "on_sale",
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "url": "https://cdn.example.com/prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ],
+         *       "version": 2,
+         *       "createdAt": "2026-11-01T03:30:00Z",
+         *       "updatedAt": "2026-11-03T05:00:00Z"
+         *     }
+         */
+        Product: {
+            readonly id: components["schemas"]["Id"];
+            /** @description 商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            /** @description 类目中文名，列表展示用。类目已删除时照常返回原名称 */
+            readonly categoryNameZh: string;
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 账面库存，货架上的件数。不能小于 lockedQty */
+            stock: number;
+            /** @description 锁定：所有待支付订单占用的件数之和 */
+            readonly lockedQty: number;
+            /** @description 可售 = 账面 − 锁定，由服务器计算 */
+            readonly sellableQty: number;
+            /** @description 销量 */
+            readonly salesCount: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            /** @description 展示的点赞数 = 基础点赞 + 用户点赞人数 */
+            readonly likeCount: number;
+            /** @description 是否上架 */
+            onShelf: boolean;
+            readonly displayStatus: components["schemas"]["ProductDisplayStatus"];
+            /** @description 简介 */
+            summaryZh: string;
+            /** @description 简介 */
+            summaryEn: string;
+            /** @description 详情 */
+            detailZh: string;
+            /** @description 详情 */
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["Image"][];
+            readonly version: components["schemas"]["Version"];
+            readonly createdAt: components["schemas"]["DateTime"];
+            readonly updatedAt: components["schemas"]["DateTime"];
+        };
+        /**
+         * @description 新增商品的请求体
+         * @example {
+         *       "categoryId": "1854239876543209540",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 20,
+         *       "baseLikes": 30,
+         *       "onShelf": true,
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ]
+         *     }
+         */
+        ProductCreateInput: {
+            /** @description 未删除的商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 账面库存 */
+            stock: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            onShelf: boolean;
+            summaryZh: string;
+            summaryEn: string;
+            detailZh: string;
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["ImageInput"][];
+        };
+        /**
+         * @description 修改商品的请求体。字段与 ProductCreateInput 相同，另加 version。入库也通过这里提交新的 stock
+         * @example {
+         *       "categoryId": "1854239876543209540",
+         *       "nameZh": "抽纸 10 包装",
+         *       "nameEn": "Facial Tissues 10-pack",
+         *       "priceCents": 1290,
+         *       "stock": 30,
+         *       "baseLikes": 30,
+         *       "onShelf": true,
+         *       "summaryZh": "柔软三层，整箱 10 包",
+         *       "summaryEn": "Soft 3-ply tissues, 10 packs per box",
+         *       "detailZh": "每包 100 抽，适合家庭日常使用。",
+         *       "detailEn": "100 sheets per pack, for everyday household use.",
+         *       "images": [
+         *         {
+         *           "key": "prod/product/2026/11/01/abc.jpg",
+         *           "width": 1080,
+         *           "height": 1440
+         *         }
+         *       ],
+         *       "version": 2
+         *     }
+         */
+        ProductUpdateInput: {
+            /** @description 未删除的商城类目 ID */
+            categoryId: components["schemas"]["Id"];
+            nameZh: string;
+            nameEn: string;
+            /** @description 价格，必须大于 0 */
+            priceCents: components["schemas"]["Cents"];
+            /** @description 新的账面库存。入库时为当前账面加入库数。不能小于写入时的锁定量 */
+            stock: number;
+            /** @description 基础点赞 */
+            baseLikes: number;
+            onShelf: boolean;
+            summaryZh: string;
+            summaryEn: string;
+            detailZh: string;
+            detailEn: string;
+            /** @description 1～9 张，第一张是主图 */
+            images: components["schemas"]["ImageInput"][];
+            /** @description 读取到的版本号，与当前版本不一致时返回 VERSION_CONFLICT */
+            version: components["schemas"]["Version"];
+        };
+        /**
+         * @description 商品列表的分页
+         * @example {
+         *       "items": [],
+         *       "total": 0,
+         *       "page": 1,
+         *       "pageSize": 20
+         *     }
+         */
+        ProductPage: components["schemas"]["PageMeta"] & {
+            items: components["schemas"]["Product"][];
+        };
+        /**
+         * @description 图片用途，服务器据此决定 key 的目录
+         *     - product：商品图片
+         * @enum {string}
+         */
+        UploadPurpose: "product";
+        /**
+         * @description 申请图片上传地址的请求体
+         * @example {
+         *       "purpose": "product",
+         *       "contentType": "image/jpeg",
+         *       "size": 1258291
+         *     }
+         */
+        PresignUploadInput: {
+            purpose: components["schemas"]["UploadPurpose"];
+            /**
+             * @description 图片的 MIME 类型。不在允许范围内时返回 UPLOAD_NOT_ALLOWED。上传时的 Content-Type 必须与它一致
+             * @enum {string}
+             */
+            contentType: "image/jpeg" | "image/png" | "image/webp";
+            /** @description 文件大小（字节），不超过 5MB。超过时返回 UPLOAD_NOT_ALLOWED */
+            size: number;
+        };
+        /**
+         * @description 预签名上传地址
+         * @example {
+         *       "key": "prod/product/2026/11/12/9f3c2a7e.jpg",
+         *       "uploadUrl": "https://example-bucket.s3.ap-southeast-2.amazonaws.com/prod/product/2026/11/12/9f3c2a7e.jpg?X-Amz-Signature=example",
+         *       "expiresAt": "2026-11-12T02:15:00Z"
+         *     }
+         */
+        PresignUploadResult: {
+            /** @description 对象 key，由服务器生成。上传成功后与图片宽高一起提交给业务接口 */
+            readonly key: components["schemas"]["ImageKey"];
+            /**
+             * Format: uri
+             * @description 预签名上传地址，用 PUT 上传。只用于上传，不能用来显示图片
+             */
+            readonly uploadUrl: string;
+            /** @description uploadUrl 的失效时间点，过期后重新申请 */
+            readonly expiresAt: components["schemas"]["DateTime"];
+        };
+        /**
          * @description 管理员。第一版不分角色，所有账号都是管理员；以后需要区分店长、店员时再加 role 字段。
          *     账号由服务器初始化，后台不提供管理员的增删改。
          */
@@ -1966,6 +3042,866 @@ export interface operations {
             /** @description INVALID_STATUS：当前状态不允许或预期旧状态已变化；VERSION_CONFLICT：读取的版本已过期。请重新读取，不盲目重试写入。 */
             409: components["responses"]["Conflict"];
             /** @description INTERNAL_ERROR：服务端异常，不应被当作无数据或操作成功。 */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listCities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["City"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的城市 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["City"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、state 缺失或不是有效的州、timezone 不是有效的 IANA 时区名、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有城市重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateCity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的城市 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["City"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、timezone 不是有效的 IANA 时区名、请求中出现 state 等未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（城市不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与其他城市重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    searchSuburbs: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                /** @description 每页条数 */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description 名称或邮编的关键字。全为数字时按邮编前缀匹配，否则按名称包含匹配 */
+                keyword?: string;
+                /** @description 按州筛选，不传时返回所有州 */
+                state?: components["schemas"]["AustralianState"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["SuburbPage"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（分页参数不合法、keyword 为空或超长、state 不是有效的州） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listDeliveryZones: {
+        parameters: {
+            query: {
+                /** @description 城市 ID */
+                cityId: components["schemas"]["Id"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["DeliveryZone"][];
+                        };
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（cityId 缺失、格式不对，或城市不存在） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDeliveryZone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryZoneCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的大区 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryZone"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、cityId 对应的城市不存在、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliveryZone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryZoneUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的大区 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryZone"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、localFeeCents 为负数或不是整数、请求中出现 cityId 等未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与同一城市的其他大区重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listZoneSuburbs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["ZoneSuburb"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addZoneSuburbs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddZoneSuburbsInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description VALIDATION_FAILED（suburbIds 为空、超过 100 个、有重复，或有不存在的 suburb） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（大区不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description SUBURB_IN_OTHER_ZONE（有 suburb 已属于另一个配送大区）；SUBURB_STATE_MISMATCH（有 suburb 的州与大区所属城市的州不一致）。details 列出出错的 suburb */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateZoneSuburb: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateZoneSuburbInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的成员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["ZoneSuburb"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（deliverableOverride 缺失，或不是布尔值或 null） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    removeZoneSuburb: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+                /** @description suburb 的 ID */
+                suburbId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（大区不存在，或 suburb 不在这个大区中） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryConfig"];
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryConfigInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliveryConfig"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（金额缺失、为负数或不是整数，version 缺失） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description VERSION_CONFLICT（提交的 version 已过期，配置已被他人修改。重新读取，不要盲目重试） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listDeliverySlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["DeliverySlot"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverySlotInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的时段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliverySlot"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有时段重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverySlotInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的时段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["DeliverySlot"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、钟点格式不对、endTime 不晚于 startTime、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（时段不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description NAME_DUPLICATED（中文名或英文名与其他时段重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteDeliverySlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（时段不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description LAST_SLOT（这是最后一个时段，至少要保留一个） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMallCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: {
+                            items: components["schemas"]["MallCategory"][];
+                        };
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createMallCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MallCategoryInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的类目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["MallCategory"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（名称为空或超长、出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NAME_DUPLICATED（中文名或英文名与已有商城类目重复） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteMallCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkNoData"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（类目不存在或已删除） */
+            404: components["responses"]["NotFound"];
+            /** @description CATEGORY_IN_USE（类目下还有已上架的商品） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                /** @description 每页条数 */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description 商城类目 ID，不传时返回全部类目 */
+                categoryId?: components["schemas"]["Id"];
+                /** @description 显示状态，不传时返回全部 */
+                displayStatus?: components["schemas"]["ProductDisplayStatus"];
+                /** @description 同时匹配 nameZh 和 nameEn */
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["ProductPage"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（分页参数不合法、categoryId 格式不对、displayStatus 不是有效的状态、keyword 为空或超长） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCreateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回新建的商品 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（必填字段缺失、超长；priceCents 不大于 0；stock 或 baseLikes 为负数或不是整数；图片为 0 张或超过 9 张、key 不是上传接口发出的；类目不存在或已删除；出现未定义的字段） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（商品不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 资源 ID */
+                id: components["parameters"]["IdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回修改后的商品 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["Product"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（字段规则与 createProduct 相同；另外 version 缺失时也返回） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description NOT_FOUND（商品不存在） */
+            404: components["responses"]["NotFound"];
+            /** @description VERSION_CONFLICT（提交的 version 已过期，商品已被他人修改。重新读取，不要盲目重试）；STOCK_BELOW_LOCKED（账面库存小于写入时的锁定量，如 message「账面库存不能小于已锁定的 3 件」，details 为 [{ field：stock，message：不能小于 3 }]） */
+            409: components["responses"]["Conflict"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
+            500: components["responses"]["InternalError"];
+        };
+    };
+    presignUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresignUploadInput"];
+            };
+        };
+        responses: {
+            /** @description 成功，返回预签名上传地址和对象 key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["PresignUploadResult"];
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED（字段缺失、类型不对、出现未定义的字段）；UPLOAD_NOT_ALLOWED（图片类型不是 JPG、PNG、WebP，或 size 超过 5MB） */
+            400: components["responses"]["ValidationFailed"];
+            /** @description NEED_LOGIN（未登录，或登录已失效） */
+            401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
+            /** @description INTERNAL_ERROR（服务器内部错误） */
             500: components["responses"]["InternalError"];
         };
     };
