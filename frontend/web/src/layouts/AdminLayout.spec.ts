@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { ApiError, http } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import App from '@/App.vue'
 import AdminLayout from './AdminLayout.vue'
@@ -30,14 +31,24 @@ async function mountAt(path: string) {
 }
 
 beforeEach(() => {
-  localStorage.clear()
   setActivePinia(createPinia())
   useAuthStore().setSession({
-    token: 'admin-token',
     expiresAt: '2099-01-01T00:00:00Z',
-    admin: { id: '9000000000000000001', account: 'staff' },
+    admin: { id: '9000000000000000001', account: 'staff', mustChangePassword: false },
   })
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** 点击「退出登录」并等待跳转完成 */
+async function clickLogout(wrapper: Awaited<ReturnType<typeof mountAt>>['wrapper']) {
+  const logoutButton = wrapper.findAll('button').find((button) => button.text() === '退出登录')
+  expect(logoutButton).toBeDefined()
+  await logoutButton?.trigger('click')
+  await flushPromises()
+}
 
 describe('AdminLayout', () => {
   it('显示所有导航分组和导航项', async () => {
@@ -64,16 +75,24 @@ describe('AdminLayout', () => {
     expect(wrapper.find('.admin-layout__account').text()).toBe('staff')
   })
 
-  it('退出登录后清除登录信息并跳到登录页', async () => {
+  it('退出登录时调用 /logout，清除登录状态并跳到登录页', async () => {
+    const request = vi.spyOn(http, 'request').mockResolvedValue(undefined)
     const { router, wrapper } = await mountAt('/')
-    const logoutButton = wrapper.findAll('button').find((button) => button.text() === '退出登录')
 
-    expect(logoutButton).toBeDefined()
-    await logoutButton?.trigger('click')
-    await router.isReady()
-    await flushPromises()
+    await clickLogout(wrapper)
 
-    expect(useAuthStore().token).toBeNull()
+    expect(request).toHaveBeenCalledWith('/logout', expect.objectContaining({ method: 'POST' }))
+    expect(useAuthStore().admin).toBeNull()
+    expect(router.currentRoute.value.path).toBe('/login')
+  })
+
+  it('/logout 失败时仍清除登录状态并跳到登录页', async () => {
+    vi.spyOn(http, 'request').mockRejectedValue(new ApiError('network'))
+    const { router, wrapper } = await mountAt('/')
+
+    await clickLogout(wrapper)
+
+    expect(useAuthStore().admin).toBeNull()
     expect(router.currentRoute.value.path).toBe('/login')
   })
 })

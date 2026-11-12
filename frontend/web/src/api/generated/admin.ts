@@ -275,10 +275,76 @@ export interface paths {
         put?: never;
         /**
          * 管理员登录
-         * @description 账号加密码登录，与顾客的微信登录分开。登录成功返回 token 和过期时间。
+         * @description 账号加密码登录，与顾客的微信登录分开。
+         *     登录成功时通过 Set-Cookie 下发通行证（httpOnly cookie），响应体只返回过期时间和当前管理员，不返回通行证。
          *     登录失败统一返回 BAD_PASSWORD，不区分是账号错还是密码错。
+         *     同一账号加同一 IP，15 分钟内失败 5 次就暂时锁定，返回 TOO_MANY_ATTEMPTS；账号不存在时也计数。
+         *     admin.mustChangePassword 为 true 时，前端直接跳到改密码页。
          */
         post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 登出
+         * @description 作废当前通行证，并通过 Set-Cookie 清除浏览器中的 cookie。
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 当前管理员
+         * @description 返回当前管理员和通行证过期时间。前端读不到 cookie，打开后台时靠本接口判断是否已登录：
+         *     返回 NEED_LOGIN 就跳转登录页；admin.mustChangePassword 为 true 就跳转改密码页。
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 修改密码
+         * @description 需要旧密码。首次登录（mustChangePassword 为 true）时必须先调用本接口，才能使用其他接口。
+         *     新密码至少 12 位，不能是常见密码，不能与旧密码相同。
+         *     成功后作废该账号的所有通行证（包括当前这一个），并通过 Set-Cookie 清除 cookie，前端跳转登录页重新登录。
+         */
+        post: operations["changePassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -491,7 +557,7 @@ export interface components {
          *     需要新的错误码时，先加到 conventions.md，再加到这里。
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "SUBURB_IN_OTHER_ZONE" | "SUBURB_STATE_MISMATCH" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
+        ErrorCode: "VALIDATION_FAILED" | "NEED_LOGIN" | "FORBIDDEN" | "NOT_FOUND" | "INVALID_STATUS" | "VERSION_CONFLICT" | "INTERNAL_ERROR" | "BAD_PASSWORD" | "TOO_MANY_ATTEMPTS" | "PASSWORD_CHANGE_REQUIRED" | "WEAK_PASSWORD" | "NAME_DUPLICATED" | "CATEGORY_IN_USE" | "STOCK_BELOW_LOCKED" | "LAST_SLOT" | "SUBURB_IN_OTHER_ZONE" | "SUBURB_STATE_MISMATCH" | "LISTING_NOT_ON_SALE" | "REFUND_PAYOUT_FAILED" | "UPLOAD_NOT_ALLOWED";
         /** @description 分页信息。分页列表的 data 由它和 items 组成，见文件开头的示例 */
         PageMeta: {
             /** @description 总条数 */
@@ -1099,11 +1165,16 @@ export interface components {
             /** @enum {string} */
             expectedListingStatus: "sold" | "self_removed" | "admin_removed";
         };
-        /** @description 管理员。第一版只有一两个店员账号，后台不提供管理员的增删改 */
+        /**
+         * @description 管理员。第一版不分角色，所有账号都是管理员；以后需要区分店长、店员时再加 role 字段。
+         *     账号由服务器初始化，后台不提供管理员的增删改。
+         */
         Admin: {
             id: components["schemas"]["Id"];
             /** @description 登录账号 */
             account: string;
+            /** @description 是否必须先改密码。账号初始化后为 true，改密码成功后变为 false。为 true 时前端直接跳到改密码页 */
+            mustChangePassword: boolean;
         };
         LoginRequest: {
             /** @description 登录账号 */
@@ -1111,11 +1182,19 @@ export interface components {
             /** @description 密码。长度上限为建议值 */
             password: string;
         };
+        /** @description 登录状态。登录接口和 GET /me 共用。通行证不在这里，由服务器通过 httpOnly cookie 下发 */
         LoginResult: {
-            /** @description 管理员 token，放在请求头中：`Authorization: Bearer <token>` */
-            token: string;
             expiresAt: components["schemas"]["DateTime"];
             admin: components["schemas"]["Admin"];
+        };
+        ChangePasswordRequest: {
+            /** @description 旧密码 */
+            oldPassword: string;
+            /**
+             * @description 新密码。至少 12 位，不能是常见密码，不能与旧密码相同，否则返回 WEAK_PASSWORD。
+             *     这里的 minLength 只拦截空值，长度规则由服务器检查并返回 WEAK_PASSWORD，以便前端显示统一提示
+             */
+            newPassword: string;
         };
         /** @description 闲置类目。与商城类目字段相同，但是独立的对象和接口。只能新增和删除，不能修改 */
         FleaCategory: {
@@ -1280,7 +1359,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description NEED_LOGIN（未登录，或 token 失效） */
+        /** @description NEED_LOGIN（未登录，或登录已失效） */
         NeedLogin: {
             headers: {
                 [name: string]: unknown;
@@ -1307,6 +1386,22 @@ export interface components {
                  *       "ok": false,
                  *       "code": "FORBIDDEN",
                  *       "message": "没有权限"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description PASSWORD_CHANGE_REQUIRED（首次登录须先改密码） */
+        PasswordChangeRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "ok": false,
+                 *       "code": "PASSWORD_CHANGE_REQUIRED",
+                 *       "message": "请先修改初始密码"
                  *     }
                  */
                 "application/json": components["schemas"]["ErrorResponse"];
@@ -1370,7 +1465,14 @@ export interface components {
         IdPath: components["schemas"]["Id"];
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description 下发通行证。值的格式：`__Host-pickaus_admin=<通行证>; Path=/; Max-Age=<秒数>; HttpOnly; Secure; SameSite=Strict` */
+        SetSessionCookie: string;
+        /** @description 清除通行证。值的格式：`__Host-pickaus_admin=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict` */
+        ClearSessionCookie: string;
+        /** @description 还需等待的秒数，之后才能再试 */
+        RetryAfter: number;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -1883,6 +1985,7 @@ export interface operations {
             /** @description 成功 */
             200: {
                 headers: {
+                    "Set-Cookie": components["headers"]["SetSessionCookie"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1908,6 +2011,156 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["Forbidden"];
+            /** @description TOO_MANY_ATTEMPTS（失败次数过多，暂时锁定） */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": false,
+                     *       "code": "TOO_MANY_ATTEMPTS",
+                     *       "message": "尝试次数过多，请稍后再试"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功，没有数据返回 */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["ClearSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true,
+                     *       "data": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: null;
+                    };
+                };
+            };
+            401: components["responses"]["NeedLogin"];
+            /** @description FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: components["schemas"]["LoginResult"];
+                    };
+                };
+            };
+            401: components["responses"]["NeedLogin"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功，没有数据返回 */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["ClearSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": true,
+                     *       "data": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OkResponse"] & {
+                        data?: null;
+                    };
+                };
+            };
+            /**
+             * @description VALIDATION_FAILED（参数校验失败）；
+             *     WEAK_PASSWORD（新密码不足 12 位、是常见密码，或与旧密码相同）
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": false,
+                     *       "code": "WEAK_PASSWORD",
+                     *       "message": "新密码至少 12 位，且不能是常见密码"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description BAD_PASSWORD（旧密码错误）；
+             *     NEED_LOGIN（未登录，或登录已失效）
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "ok": false,
+                     *       "code": "BAD_PASSWORD",
+                     *       "message": "旧密码错误"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1934,6 +2187,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NeedLogin"];
+            403: components["responses"]["PasswordChangeRequired"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1963,6 +2217,8 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             /** @description NAME_DUPLICATED（中文名或英文名与已有闲置类目重复） */
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
@@ -1982,6 +2238,8 @@ export interface operations {
         responses: {
             200: components["responses"]["OkNoData"];
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             404: components["responses"]["NotFound"];
             /** @description CATEGORY_IN_USE（还有在售帖子使用这个类目） */
             409: components["responses"]["Conflict"];
@@ -2023,6 +2281,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["NeedLogin"];
+            403: components["responses"]["PasswordChangeRequired"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2050,6 +2309,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NeedLogin"];
+            403: components["responses"]["PasswordChangeRequired"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -2073,6 +2333,8 @@ export interface operations {
             200: components["responses"]["OkNoData"];
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["NeedLogin"];
+            /** @description PASSWORD_CHANGE_REQUIRED（须先改密码）；FORBIDDEN（Origin 请求头不是后台自己的域名） */
+            403: components["responses"]["PasswordChangeRequired"];
             404: components["responses"]["NotFound"];
             /** @description LISTING_NOT_ON_SALE（帖子不是在售状态，不能强制下架） */
             409: components["responses"]["Conflict"];

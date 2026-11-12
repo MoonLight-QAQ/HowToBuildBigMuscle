@@ -10,9 +10,9 @@ const router = useRouter()
 const authStore = useAuthStore()
 const activeMenuPath = computed(() => findActiveMenuPath(route.path))
 
-// 契约中没有退出登录接口，只清除本地登录信息
+// 调用 /logout 作废通行证；无论成功还是失败，本地登录状态都已清除，直接跳到登录页
 async function logout(): Promise<void> {
-  authStore.clear()
+  await authStore.logout()
   await router.replace(LOGIN_PATH)
 }
 </script>
