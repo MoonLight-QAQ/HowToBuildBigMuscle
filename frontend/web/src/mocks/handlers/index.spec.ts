@@ -44,7 +44,9 @@ describe('MSW handler 汇总', () => {
   })
 
   // TODO(W-03)：登录状态的模拟移到 handlers/auth.ts 后，这个用例随之移走。
-  it('/me 返回已登录状态；退出登录后返回 NEED_LOGIN', async () => {
+  // 中文：使用共享模拟会话读取举报，退出后读写都应拒绝。
+  // English: Read reports via the shared Mock session and reject all report access after logout.
+  it('临时会话可读举报，退出后拒绝读取及处理', async () => {
     const me = await fetch(`${baseURL}/me`)
     expect(me.status).toBe(200)
     expect(await me.json()).toMatchObject({
@@ -52,12 +54,30 @@ describe('MSW handler 汇总', () => {
       data: { admin: { mustChangePassword: false } },
     })
 
+    const reports = await fetch(`${baseURL}/reports?status=open`)
+    expect(reports.status).toBe(200)
+    const page: { data: { items: components['schemas']['Report'][] } } = await reports.json()
+    const report = page.data.items[0]!
+    const detailURL = `${baseURL}/reports/${report.id}`
+    expect((await fetch(detailURL)).status).toBe(200)
+
     const logout = await fetch(`${baseURL}/logout`, { method: 'POST' })
     expect(await logout.json()).toEqual({ ok: true, data: null })
 
     const after = await fetch(`${baseURL}/me`)
     expect(after.status).toBe(401)
     expect(await after.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+
+    for (const url of [`${baseURL}/reports`, detailURL]) {
+      const response = await fetch(url)
+      expect(response.status).toBe(401)
+      expect(await response.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    }
+    for (const action of ['ignore', 'takedown']) {
+      const response = await fetch(`${detailURL}/${action}`, { method: 'POST' })
+      expect(response.status).toBe(401)
+      expect(await response.json()).toMatchObject({ ok: false, code: 'NEED_LOGIN' })
+    }
   })
 
   // 中文：后续模块可优先匹配；无输入/输出，只增加本例测试 handler。

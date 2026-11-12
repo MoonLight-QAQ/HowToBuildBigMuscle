@@ -1,6 +1,7 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
 import type { components } from '@/api/generated/admin'
 import { ERROR_CODE } from '@/constants/error-code'
+import { createReportMock, type ReportMockRole } from './report'
 
 /**
  * 中文：未注册的管理接口明确失败；无输入，返回契约错误，不记录或回显请求资料。
@@ -44,8 +45,14 @@ const sessionHandlers: HttpHandler[] = [
   }),
 ]
 
+/** 从正式登录接入前的共享 Mock 会话取得举报处理权限，退出后返回 null。 / Resolve reviewer access from the temporary shared Mock session, returning null after logout. */
+function readTemporaryReportRole(): ReportMockRole | null {
+  return mockLoggedIn ? 'reviewer' : null
+}
+
 export const handlers: HttpHandler[] = [
   ...sessionHandlers,
+  ...createReportMock({ readSessionRole: readTemporaryReportRole }).handlers,
   // 后续模块的 handler 放在兜底之前；未注册的管理接口不透传到真实网络。
   http.all(`${import.meta.env.VITE_API_BASE_URL}/*`, missingMock),
 ]
