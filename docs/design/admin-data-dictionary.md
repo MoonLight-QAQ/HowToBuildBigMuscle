@@ -178,8 +178,12 @@
 | --- | --- | --- | --- |
 | `id` | id | | |
 | `account` | string(32) | | 登录账号 |
+| `mustChangePassword` | boolean | | 是否必须先改密码。账号初始化后为 `true`，改密码成功后变为 `false`。为 `true` 时前端直接跳到改密码页 |
 
-登录接口返回 `{ token, expiresAt, admin }`。第一版只有一两个店员账号，后台不提供管理员的增删改。
+- 第一版不分角色，所有账号都是管理员。以后招了店长或店员再加 `role` 字段，属于加字段，不影响现有接口。
+- 账号由服务器初始化，后台不提供管理员的增删改。
+- 登录接口和 `GET /me` 都返回 `{ expiresAt, admin }`。通行证不在返回值里，由服务器通过 httpOnly cookie 下发，见 ADR 0006。
+- 改密码请求体为 `{ oldPassword, newPassword }`，新密码至少 12 位，不能是常见密码，不能与旧密码相同。
 
 ### Summary 概览
 

@@ -64,16 +64,33 @@
 - 请求体和响应体都是 JSON，`Content-Type: application/json`。
 - 字段名用 **camelCase**。
 - 查询参数也用 camelCase：`GET /orders?status=pending&page=1`。
-- 不要相信前端传来的操作者身份、价格、库存。操作者以 token 为准，金额和库存以服务器计算为准。
+- 不要相信前端传来的操作者身份、价格、库存。操作者以服务器识别出的登录身份为准，金额和库存以服务器计算为准。
 
 ## 4. 鉴权
 
-- 除登录接口外，所有接口都要在请求头中带 token：
+管理端和小程序端的鉴权方式不同。管理员与顾客的登录凭证**互不通用**：用顾客的凭证调管理端接口，返回 `NEED_LOGIN`。
+
+### 管理端
+
+管理端用同域的 httpOnly cookie 保存通行证，前端代码读不到也不保存通行证。原因见 ADR 0006。
+
+- 登录成功时，服务器通过 `Set-Cookie` 下发通行证：
   ```http
-  Authorization: Bearer <token>
+  Set-Cookie: __Host-pickaus_admin=<通行证>; Path=/; Max-Age=<秒数>; HttpOnly; Secure; SameSite=Strict
   ```
-- 管理员 token 与顾客 token **互不通用**。用顾客 token 调管理端接口，返回 `NEED_LOGIN`。
-- 登录成功返回 `token` 和过期时间 `expiresAt`。token 过期或无效，返回 `NEED_LOGIN`，前端跳转登录页。
+  响应体只返回过期时间 `expiresAt` 和当前管理员 `admin`，不返回通行证。
+- 之后的请求由浏览器自动带上 cookie，前端不需要设置请求头。前端与接口必须同域（开发环境通过代理实现）。
+- 通行证保存在服务器端，最长 30 天，数值写在配置里。登出时作废当前通行证；改密码或停用账号时，作废该账号的所有通行证。
+- 通行证缺失、过期或已作废，返回 `NEED_LOGIN`，前端跳转登录页。
+- 前端读不到 cookie，打开后台时调用 `GET /me` 判断是否已登录。
+- 除 `GET` 外的请求，服务器检查 `Origin` 请求头是否为后台自己的域名。不一致返回 `FORBIDDEN`。
+- 第一版不分角色，所有账号都是管理员。
+- `mustChangePassword` 为 `true` 的管理员，除 `/login`、`/logout`、`/me`、`/password` 外的接口都返回 `PASSWORD_CHANGE_REQUIRED`。前端收到后跳转改密码页 `/change-password`。
+- 登录：同一账号加同一 IP，15 分钟内失败 5 次就暂时锁定，返回 `TOO_MANY_ATTEMPTS`（429），并带 `Retry-After` 响应头，值为还需等待的秒数。账号不存在时也计数。次数和时长写在配置里。
+
+### 小程序端
+
+以小程序契约为准。小程序没有浏览器 cookie，计划在请求头中带顾客 token：`Authorization: Bearer <token>`。
 
 ## 5. 响应格式
 
@@ -107,11 +124,12 @@
 | 状态码 | 场景 |
 | --- | --- |
 | `200` | 成功 |
-| `400` | 参数校验失败（`VALIDATION_FAILED`） |
-| `401` | 未登录或 token 失效（`NEED_LOGIN`） |
-| `403` | 已登录但没有权限（`FORBIDDEN`） |
+| `400` | 参数校验失败（`VALIDATION_FAILED`），或新密码不符合规则（`WEAK_PASSWORD`） |
+| `401` | 未登录或登录已失效（`NEED_LOGIN`） |
+| `403` | 已登录但没有权限（`FORBIDDEN`），或须先改密码（`PASSWORD_CHANGE_REQUIRED`） |
 | `404` | 资源不存在（`NOT_FOUND`） |
 | `409` | 业务规则不允许，例如状态已变化、名称重复、库存不足 |
+| `429` | 尝试次数过多（`TOO_MANY_ATTEMPTS`），带 `Retry-After` 响应头 |
 | `500` | 服务器内部错误（`INTERNAL_ERROR`） |
 
 前端以 `code` 为准判断错误类型，HTTP 状态码只作为辅助。
@@ -216,7 +234,7 @@
 | code | HTTP | 含义 |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | 参数校验失败，详情见 `details` |
-| `NEED_LOGIN` | 401 | 未登录，或 token 失效 |
+| `NEED_LOGIN` | 401 | 未登录，或登录已失效 |
 | `FORBIDDEN` | 403 | 没有权限 |
 | `NOT_FOUND` | 404 | 资源不存在 |
 | `INVALID_STATUS` | 409 | 当前状态不允许此操作（如对已完成的订单开始配送） |
@@ -227,7 +245,10 @@
 
 | code | HTTP | 含义 | 出处 |
 | --- | --- | --- | --- |
-| `BAD_PASSWORD` | 401 | 账号或密码错误。**不区分是账号错还是密码错** | PRD 第 3 节 |
+| `BAD_PASSWORD` | 401 | 账号或密码错误。**不区分是账号错还是密码错**。改密码时旧密码错误也返回它 | PRD 第 3 节 |
+| `TOO_MANY_ATTEMPTS` | 429 | 尝试次数过多，带 `Retry-After` 响应头 | PRD 第 3 节、ADR 0006 |
+| `PASSWORD_CHANGE_REQUIRED` | 403 | 首次登录须先改密码 | PRD 第 3 节、ADR 0006 |
+| `WEAK_PASSWORD` | 400 | 新密码不符合规则（至少 12 位，不能是常见密码，不能与旧密码相同） | PRD 第 3 节、ADR 0006 |
 | `NAME_DUPLICATED` | 409 | 名称与已有数据重复（类目、城市、时段；配送大区在同一城市内不能重复） | PRD 第 9、11、14 节 |
 | `CATEGORY_IN_USE` | 409 | 类目下还有在售商品或在售帖子，不能删除 | PRD 第 9、14 节 |
 | `STOCK_BELOW_LOCKED` | 409 | 账面库存不能小于已锁定的件数 | PRD 第 8 节 |
