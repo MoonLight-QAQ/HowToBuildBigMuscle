@@ -224,15 +224,30 @@ export function checkCitySort(value: unknown): string | null {
   return typeof value === 'number' && Number.isSafeInteger(value) ? null : '排序必须是整数'
 }
 
+/** 表单中可能出现校验错误的字段。 */
+export type CityFormField = keyof CityForm
+
+/**
+ * 查询服务器返回的字段错误（VALIDATION_FAILED 的 details）。
+ * 参数：字段名、字段当前的值。返回：错误提示；没有错误，或店员已经改过这个字段时为 null。
+ */
+export type ServerFieldErrorLookup = (field: CityFormField, value: unknown) => string | null
+
 /**
  * 把 checkXxx 函数包装成 Element Plus 的校验规则。
- * 参数：检查函数。返回：一条规则，在输入和失去焦点时触发。
+ * 先做本地检查；本地检查通过后，再看服务器是否对这个字段返回过错误。
+ * 这样服务器的字段错误也显示在对应输入框下面，店员修改后自动消失。
+ * 参数：字段名、检查函数、服务器字段错误的查询函数。返回：一条规则，在输入和失去焦点时触发。
  */
-function ruleOf(check: (value: unknown) => string | null): FormItemRule {
+function ruleOf(
+  field: CityFormField,
+  check: (value: unknown) => string | null,
+  serverError: ServerFieldErrorLookup,
+): FormItemRule {
   return {
     trigger: ['blur', 'change'],
     validator(_rule, value, callback) {
-      const message = check(value)
+      const message = check(value) ?? serverError(field, value)
       callback(message === null ? undefined : new Error(message))
     },
   }
@@ -240,15 +255,43 @@ function ruleOf(check: (value: unknown) => string | null): FormItemRule {
 
 /**
  * 城市表单的校验规则。
- * 参数：表单模式。编辑时州只读，不校验。返回：交给 ElForm 的 rules。
+ * 参数：表单模式（编辑时州只读，不校验）；可选的服务器字段错误查询函数。
+ * 返回：交给 ElForm 的 rules。
  */
-export function createCityFormRules(mode: CityFormMode): FormRules<CityForm> {
+export function createCityFormRules(
+  mode: CityFormMode,
+  serverError: ServerFieldErrorLookup = () => null,
+): FormRules<CityForm> {
   const rules: FormRules<CityForm> = {
-    nameZh: [ruleOf((value) => checkCityName(value, '中文名', CITY_NAME_ZH_MAX_LENGTH))],
-    nameEn: [ruleOf((value) => checkCityName(value, '英文名', CITY_NAME_EN_MAX_LENGTH))],
-    timezone: [ruleOf(checkCityTimezone)],
-    sort: [ruleOf(checkCitySort)],
+    nameZh: [
+      ruleOf(
+        'nameZh',
+        (value) => checkCityName(value, '中文名', CITY_NAME_ZH_MAX_LENGTH),
+        serverError,
+      ),
+    ],
+    nameEn: [
+      ruleOf(
+        'nameEn',
+        (value) => checkCityName(value, '英文名', CITY_NAME_EN_MAX_LENGTH),
+        serverError,
+      ),
+    ],
+    fulfillment: [ruleOf('fulfillment', () => null, serverError)],
+    timezone: [ruleOf('timezone', checkCityTimezone, serverError)],
+    sort: [ruleOf('sort', checkCitySort, serverError)],
   }
-  if (mode === 'create') rules.state = [ruleOf(checkCityState)]
+  if (mode === 'create') rules.state = [ruleOf('state', checkCityState, serverError)]
   return rules
+}
+
+/**
+ * 切换配送方式成功后的提示。
+ * 改成线下后，城市模块看不到配送大区，只能提醒店员去配送页确认可送的区（见 PRD 第 10、11 节）。
+ * 参数：切换后的配送方式。返回：提示文案。
+ */
+export function fulfillmentChangedMessage(city: Pick<City, 'nameZh' | 'fulfillment'>): string {
+  return city.fulfillment === 'local'
+    ? `${city.nameZh}已改为线下配送。请到配送页确认可送的区，没有可送的区时新订单不能付款。`
+    : `${city.nameZh}已改为快递。全市可下单，满包邮门槛免邮费。`
 }

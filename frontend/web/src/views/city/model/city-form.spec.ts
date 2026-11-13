@@ -19,6 +19,7 @@ import {
   createDefaultCityForm,
   formToCreateInput,
   formToUpdateInput,
+  fulfillmentChangedMessage,
   nextCitySort,
   prefillTimezone,
   STATE_DEFAULT_TIMEZONE,
@@ -325,5 +326,37 @@ describe('createCityFormRules', () => {
     const rules = createCityFormRules('edit')
     expect(runRule(rules.timezone, '')).toBe('请选择时区')
     expect(runRule(rules.sort, null)).toBe('请填写排序')
+  })
+
+  it('本地检查通过后，显示服务器返回的字段错误', () => {
+    const rules = createCityFormRules('edit', (field, value) =>
+      field === 'timezone' && value === 'Australia/Nowhere' ? '必须是有效的 IANA 时区名' : null,
+    )
+    expect(runRule(rules.timezone, 'Australia/Nowhere')).toBe('必须是有效的 IANA 时区名')
+    expect(runRule(rules.timezone, 'Australia/Sydney')).toBeNull()
+  })
+
+  it('本地检查不通过时，优先显示本地的提示', () => {
+    const rules = createCityFormRules('edit', () => '服务器错误')
+    expect(runRule(rules.nameZh, '')).toBe('请填写中文名')
+  })
+
+  it('fulfillment 本地不校验，只显示服务器错误', () => {
+    expect(runRule(createCityFormRules('edit').fulfillment, 'post')).toBeNull()
+    expect(runRule(createCityFormRules('edit', () => '无效').fulfillment, 'x')).toBe('无效')
+  })
+})
+
+describe('fulfillmentChangedMessage', () => {
+  it('改为线下时，提醒去配送页确认可送的区', () => {
+    expect(fulfillmentChangedMessage({ nameZh: '悉尼', fulfillment: 'local' })).toContain(
+      '请到配送页确认可送的区',
+    )
+  })
+
+  it('改为快递时，说明全市可下单', () => {
+    expect(fulfillmentChangedMessage({ nameZh: '堪培拉', fulfillment: 'post' })).toContain(
+      '全市可下单',
+    )
   })
 })
