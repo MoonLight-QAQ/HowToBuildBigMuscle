@@ -189,6 +189,18 @@ export function toggleFulfillmentInput(city: City): CityUpdateInput {
 }
 
 /**
+ * 列表中切换配送方式的按钮文案和确认提示。
+ * 参数：列表中的城市。返回：按钮文案、确认提示。
+ */
+export function toggleFulfillmentText(city: Pick<City, 'nameZh' | 'fulfillment'>): {
+  action: string
+  confirm: string
+} {
+  const action = city.fulfillment === 'local' ? '改成快递' : '改成线下配送'
+  return { action, confirm: `确定把${city.nameZh}${action}吗？只影响之后的新订单。` }
+}
+
+/**
  * 检查名称。去掉首尾空格后不能为空，长度不能超过上限（按字符计算，与契约 maxLength 一致）。
  * 参数：输入值、字段中文名、最大长度。返回：错误提示；没有错误时为 null。
  */

@@ -25,6 +25,7 @@ import {
   STATE_DEFAULT_TIMEZONE,
   TIMEZONE_OPTIONS,
   toggleFulfillmentInput,
+  toggleFulfillmentText,
   type CityForm,
 } from './city-form'
 
@@ -344,6 +345,19 @@ describe('createCityFormRules', () => {
   it('fulfillment 本地不校验，只显示服务器错误', () => {
     expect(runRule(createCityFormRules('edit').fulfillment, 'post')).toBeNull()
     expect(runRule(createCityFormRules('edit', () => '无效').fulfillment, 'x')).toBe('无效')
+  })
+})
+
+describe('toggleFulfillmentText', () => {
+  it('线下城市的按钮为「改成快递」', () => {
+    expect(toggleFulfillmentText(sydney)).toEqual({
+      action: '改成快递',
+      confirm: '确定把悉尼改成快递吗？只影响之后的新订单。',
+    })
+  })
+
+  it('快递城市的按钮为「改成线下配送」', () => {
+    expect(toggleFulfillmentText(canberra).action).toBe('改成线下配送')
   })
 })
 
