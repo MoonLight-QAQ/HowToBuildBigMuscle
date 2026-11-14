@@ -30,7 +30,9 @@ import {
 import { useOrderDetail } from './use-order-detail'
 import OrderItemsTable from './components/OrderItemsTable.vue'
 
-const props = defineProps<{ orderId: string }>()
+const props = withDefaults(defineProps<{ orderId: string; refundLinkAvailable?: boolean }>(), {
+  refundLinkAvailable: true,
+})
 const emit = defineEmits<{ back: []; openRefund: [id: string] }>()
 /** 提供响应式订单ID；读取本身无副作用。 / Supply the reactive order ID without effects. */
 function getOrderId(): string {
@@ -203,9 +205,9 @@ function openRefund(id: string): void {
           >
           <ElTableColumn label="操作" width="110"
             ><template #default="{ row }"
-              ><ElButton link type="primary" @click="openRefund(row.id)"
+              ><ElButton v-if="refundLinkAvailable" link type="primary" @click="openRefund(row.id)"
                 >查看退款</ElButton
-              ></template
+              ><span v-else>退款详情待接入</span></template
             ></ElTableColumn
           >
         </ElTable>

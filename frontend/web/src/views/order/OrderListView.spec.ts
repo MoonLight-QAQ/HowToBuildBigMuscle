@@ -61,6 +61,21 @@ it('filters through the real select and omits all-status query', async function 
   expect(wrapper.text()).toContain('当前筛选下暂无订单')
 })
 
+/** 深链接筛选用于第一次请求，后续路由筛选变化重新读取。 / Apply deep-link filtering on the first request and reload on route changes. */
+it('loads the URL filter without an initial unfiltered request', async function testRouteFilter() {
+  const list = vi
+    .spyOn(orderApi, 'list')
+    .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 })
+  const wrapper = mount(OrderListView, { props: { initialStatus: 'pending' } })
+  wrappers.push(wrapper)
+  await flushPromises()
+  expect(list).toHaveBeenCalledTimes(1)
+  expect(list.mock.lastCall?.[0]).toEqual({ page: 1, pageSize: 20, status: 'pending' })
+  await wrapper.setProps({ initialStatus: 'delivering' })
+  await flushPromises()
+  expect(list.mock.lastCall?.[0]).toEqual({ page: 1, pageSize: 20, status: 'delivering' })
+})
+
 /** 页面失败显示重试，重试成功后清除错误并呈现空态。 / Show retry after failure and clear the error after a successful empty response. */
 it('shows an error and supports retry with real UI', async function testListRetry() {
   const list = vi

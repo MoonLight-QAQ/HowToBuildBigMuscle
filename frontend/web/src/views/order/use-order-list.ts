@@ -4,8 +4,11 @@ import { useTable } from '@/composables/useTable'
 import { orderErrorMessage } from './order-presentation'
 
 /** 使用契约API管理本页筛选、分页和取消；返回只读列表状态及操作。 / Manage local filters and cancellable pagination through the contract API. */
-export function useOrderList(service: Pick<typeof orderApi, 'list'> = orderApi) {
-  const status = ref<OrderStatus | ''>('')
+export function useOrderList(
+  service: Pick<typeof orderApi, 'list'> = orderApi,
+  initialStatus: OrderStatus | '' = '',
+) {
+  const status = ref<OrderStatus | ''>(initialStatus)
   /** 读取本页筛选并加载已验证数据；请求错误由useTable捕获。 / Read filters and load validated rows; useTable captures failures. */
   async function loadPage(query: { page: number; pageSize: number; signal: AbortSignal }) {
     const filters: ListOrdersQuery = { page: query.page, pageSize: query.pageSize }

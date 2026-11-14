@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import {
   ElAlert,
   ElButton,
@@ -14,13 +14,16 @@ import {
   ElTag,
 } from 'element-plus'
 import { ORDER_FILTERS, ORDER_FULFILLMENT, ORDER_STATUS } from '@/constants/order'
-import type { OrderListItem } from '@/api/order'
+import type { OrderListItem, OrderStatus } from '@/api/order'
 import { displayMoney } from '@/utils/money'
 import { displayDateTime } from '@/utils/date'
 import { deliveryWindow } from './order-presentation'
 import { useOrderList } from './use-order-list'
 
-const emit = defineEmits<{ openOrder: [id: string] }>()
+const props = withDefaults(defineProps<{ initialStatus?: OrderStatus | '' }>(), {
+  initialStatus: '',
+})
+const emit = defineEmits<{ openOrder: [id: string]; statusChange: [status: OrderStatus | ''] }>()
 const {
   items,
   total,
@@ -35,12 +38,18 @@ const {
   reload,
   setPage,
   setPageSize,
-} = useOrderList()
+} = useOrderList(undefined, props.initialStatus)
 
 /** 将已选状态交给数据层，并重置分页；返回加载结果。 / Apply the selected status in the data layer and reset pagination. */
 function applyFilter(): Promise<boolean> {
+  emit('statusChange', status.value)
   return filter(status.value)
 }
+/** 响应站内导航和浏览器历史的筛选变化；相同值不重复加载。 / Apply navigation or history filters without reloading an unchanged selection. */
+function applyRouteStatus(nextStatus: OrderStatus | ''): void {
+  if (nextStatus !== status.value) void filter(nextStatus)
+}
+watch(() => props.initialStatus, applyRouteStatus)
 /** 请求宿主打开订单详情；仅发送字符串ID，无写操作。 / Ask the host to open order detail using a string ID, without writes. */
 function openOrder(id: string): void {
   emit('openOrder', id)
