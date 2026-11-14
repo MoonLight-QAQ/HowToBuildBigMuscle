@@ -61,6 +61,14 @@ frontend/web/src/utils/
 # 锁定会挡住 A、C 区块后续的修改。B 区块由文件头的区块规则（只在自己的区块内修改）
 # 和 CODEOWNERS 对 docs/ 的审查保护。修改 B 区块前，先和 @MoonLight-QAQ 沟通。
 
+# W-02 城市（示例模块）（#25）
+# router/index.ts 中的城市路由、mocks/handlers/index.ts 中的注册、constants/ 下新增的
+# australian-state.ts 和 fulfillment.ts 不锁定：这些文件保持开放，其他模块也要修改或使用。
+frontend/web/src/views/city/
+frontend/web/src/api/city.ts
+frontend/web/src/mocks/handlers/city.ts
+frontend/web/src/mocks/data/city.ts
+
 # W-03 登录（#26）
 # 改密码页 ChangePasswordView 也在 views/login/ 下。
 frontend/web/src/views/login/
