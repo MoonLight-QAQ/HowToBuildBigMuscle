@@ -2,6 +2,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw/http'
 import { setupServer } from 'msw/node'
+import type { City } from '@/api/city'
 import type { components } from '@/api/generated/admin'
 import { MOCK_ADMIN_ACCOUNTS } from '@/mocks/data/auth'
 
@@ -9,6 +10,7 @@ const baseURL = 'http://localhost/api/admin'
 vi.stubEnv('VITE_API_BASE_URL', baseURL)
 const { handlers } = await import('./index')
 const { resetAuthMock } = await import('./auth')
+const { resetCityMock } = await import('./city')
 const server = setupServer(...handlers)
 
 // 中文：启用测试拦截；无输入/输出，只改变测试环境。
@@ -17,17 +19,30 @@ beforeAll(() => {
   server.listen({ onUnhandledFrame: 'error' })
 })
 
-// 兜底的用例以已登录身份发请求，否则会先被会话拦截返回 401
-async function loginAsStaff(): Promise<void> {
-  const staff = MOCK_ADMIN_ACCOUNTS.find((item) => !item.admin.mustChangePassword)!
-  await fetch(`${baseURL}/login`, {
-    method: 'POST',
+/** 发送 JSON 请求 */
+function send(method: string, path: string, body?: unknown): Promise<Response> {
+  return fetch(`${baseURL}${path}`, {
+    method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account: staff.admin.account, password: staff.password }),
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
 
-beforeEach(() => resetAuthMock())
+/** 用指定类型的模拟账号登录 */
+async function loginAs(mustChangePassword: boolean): Promise<void> {
+  const target = MOCK_ADMIN_ACCOUNTS.find(
+    (item) => item.admin.mustChangePassword === mustChangePassword,
+  )!
+  await send('POST', '/login', { account: target.admin.account, password: target.password })
+}
+
+// 兜底的用例以已登录身份发请求，否则会先被会话拦截返回 401
+const loginAsStaff = () => loginAs(false)
+
+beforeEach(() => {
+  resetAuthMock()
+  resetCityMock()
+})
 
 // 中文：每例清除运行时 handler；无输入/输出，仅重置测试状态。
 // English: Clear runtime handlers per case; no inputs/output, test reset only.
@@ -92,5 +107,60 @@ describe('MSW handler 汇总', () => {
     const response = await fetch(`${baseURL}/__test__/missing`, { method: 'POST' })
     expect(response.status).toBe(500)
     expect(await response.json()).toMatchObject({ ok: false, code: 'INTERNAL_ERROR' })
+  })
+})
+
+// 回归测试：用真实注册顺序确认城市接口受统一的会话拦截。
+// 新增和修改的请求体都合法，一旦拦截失效写操作就会成功，数据会变化，用例会失败。
+describe('城市接口受会话拦截', () => {
+  // 修改的请求体不能带 state（州创建后不能修改）
+  const cityUpdate = {
+    nameZh: '布里斯班',
+    nameEn: 'Brisbane',
+    fulfillment: 'post',
+    timezone: 'Australia/Brisbane',
+    sort: 4,
+  }
+  const newCity = { ...cityUpdate, state: 'QLD' }
+
+  /** 以 staff 身份读取城市列表 */
+  async function listCities(): Promise<City[]> {
+    const response = await send('GET', '/cities')
+    expect(response.status).toBe(200)
+    return (await response.json()).data.items
+  }
+
+  /** 列表、新增、修改都被拒绝 */
+  async function expectAllRejected(id: string, status: number, code: string): Promise<void> {
+    for (const response of [
+      await send('GET', '/cities'),
+      await send('POST', '/cities', newCity),
+      await send('PUT', `/cities/${id}`, cityUpdate),
+    ]) {
+      expect(response.status).toBe(status)
+      expect(await response.json()).toMatchObject({ ok: false, code })
+    }
+  }
+
+  it('退出后列表、新增、修改都返回 NEED_LOGIN，数据不变', async () => {
+    await loginAsStaff()
+    const before = await listCities()
+    await send('POST', '/logout')
+
+    await expectAllRejected(before[0]!.id, 401, 'NEED_LOGIN')
+
+    await loginAsStaff()
+    expect(await listCities()).toEqual(before)
+  })
+
+  it('须先改密码时列表、新增、修改都返回 PASSWORD_CHANGE_REQUIRED，数据不变', async () => {
+    await loginAsStaff()
+    const before = await listCities()
+
+    await loginAs(true)
+    await expectAllRejected(before[0]!.id, 403, 'PASSWORD_CHANGE_REQUIRED')
+
+    await loginAsStaff()
+    expect(await listCities()).toEqual(before)
   })
 })
