@@ -137,7 +137,16 @@ describe('选择州', () => {
 
 describe('提交', () => {
   it('新增成功：提交新增请求体，关闭弹窗，提示并重新加载', async () => {
-    mockedCreate.mockResolvedValue({ ...sydney, id: '9' })
+    mockedCreate.mockResolvedValue({
+      ...sydney,
+      id: '9',
+      nameZh: '布里斯班',
+      nameEn: 'Brisbane',
+      fulfillment: 'post',
+      state: 'QLD',
+      timezone: 'Australia/Brisbane',
+      sort: 2,
+    })
     const { form, onSaved } = createForm()
     fillCreate(form)
     await expect(form.submit()).resolves.toBe(true)
@@ -150,7 +159,9 @@ describe('提交', () => {
       sort: 2,
     })
     expect(form.visible.value).toBe(false)
-    expect(success).toHaveBeenCalledWith('城市已添加')
+    expect(success).toHaveBeenCalledWith(
+      '布里斯班已添加。请到配送页为它建配送大区，没有大区时用户无法下单。',
+    )
     expect(onSaved).toHaveBeenCalledTimes(1)
   })
 

@@ -26,6 +26,7 @@ import { createCity, updateCity, type AustralianState, type City } from '@/api/c
 import { isErrorCode } from '@/api/http'
 import { ERROR_CODE } from '@/constants/error-code'
 import {
+  cityCreatedMessage,
   cityToForm,
   createCityFormRules,
   createDefaultCityForm,
@@ -36,7 +37,7 @@ import {
   type CityFormField,
   type CityFormMode,
 } from '../model/city-form'
-import { toErrorMessage } from './useCityList'
+import { toErrorMessage } from '../model/error-message'
 
 /** 服务器返回的字段错误，以及提交时该字段的值。字段的值改变后，这条错误不再显示。 */
 interface ServerFieldError {
@@ -155,8 +156,8 @@ export function useCityForm(options: UseCityFormOptions) {
     clearErrors()
     try {
       if (mode.value === 'create') {
-        await createCity(formToCreateInput(form.value))
-        ElMessage.success('城市已添加')
+        const created = await createCity(formToCreateInput(form.value))
+        ElMessage.success(cityCreatedMessage(created))
       } else {
         await updateCity(editingId.value!, formToUpdateInput(form.value))
         ElMessage.success('城市已保存')

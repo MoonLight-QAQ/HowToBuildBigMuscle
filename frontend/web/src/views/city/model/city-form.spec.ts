@@ -14,6 +14,7 @@ import {
   checkCitySort,
   checkCityState,
   checkCityTimezone,
+  cityCreatedMessage,
   cityToForm,
   createCityFormRules,
   createDefaultCityForm,
@@ -368,9 +369,17 @@ describe('fulfillmentChangedMessage', () => {
     )
   })
 
-  it('改为快递时，说明全市可下单', () => {
-    expect(fulfillmentChangedMessage({ nameZh: '堪培拉', fulfillment: 'post' })).toContain(
-      '全市可下单',
-    )
+  it('改为快递时，说明只支持本市配送大区内的地址', () => {
+    const message = fulfillmentChangedMessage({ nameZh: '堪培拉', fulfillment: 'post' })
+    expect(message).toContain('本市配送大区')
+    expect(message).not.toContain('全市可下单')
+  })
+})
+
+describe('cityCreatedMessage', () => {
+  it('提醒去配送页为新城市建配送大区', () => {
+    const message = cityCreatedMessage({ nameZh: '布里斯班' })
+    expect(message).toContain('布里斯班已添加')
+    expect(message).toContain('请到配送页为它建配送大区')
   })
 })

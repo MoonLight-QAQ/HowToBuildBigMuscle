@@ -298,12 +298,23 @@ export function createCityFormRules(
 }
 
 /**
+ * 新增城市成功后的提示。
+ * 新城市没有配送大区，线下和快递城市的地址都会越界，所以提醒店员去配送页建大区
+ * （见 ADR 0005 第 4 条和契约 createCity）。
+ * 参数：新增的城市。返回：提示文案。
+ */
+export function cityCreatedMessage(city: Pick<City, 'nameZh'>): string {
+  return `${city.nameZh}已添加。请到配送页为它建配送大区，没有大区时用户无法下单。`
+}
+
+/**
  * 切换配送方式成功后的提示。
  * 改成线下后，城市模块看不到配送大区，只能提醒店员去配送页确认可送的区（见 PRD 第 10、11 节）。
+ * 改成快递后，地址仍须属于本市的配送大区，只是不检查可送设置（见 ADR 0005 第 4 条和契约 updateCity）。
  * 参数：切换后的配送方式。返回：提示文案。
  */
 export function fulfillmentChangedMessage(city: Pick<City, 'nameZh' | 'fulfillment'>): string {
   return city.fulfillment === 'local'
     ? `${city.nameZh}已改为线下配送。请到配送页确认可送的区，没有可送的区时新订单不能付款。`
-    : `${city.nameZh}已改为快递。全市可下单，满包邮门槛免邮费。`
+    : `${city.nameZh}已改为快递。仅支持本市配送大区内的地址，满包邮门槛免邮费。`
 }

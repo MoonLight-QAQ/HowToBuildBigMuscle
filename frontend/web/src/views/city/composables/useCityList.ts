@@ -5,8 +5,8 @@
  * - 管理加载中、加载失败、空数据三种状态，以及「重试」。
  * - 新的请求开始时取消上一次未完成的请求，迟到的旧结果不会覆盖新结果。
  * - 切换配送方式：调用接口、提示结果、重新加载列表。请求体和提示文案由 model/city-form.ts 生成。
- * - 错误提示一律取 ApiError.message：http.ts 已按错误码从 src/constants/error-code.ts 取出文案，
- *   这里不写死任何错误文案。
+ * - 错误提示一律经 model/error-message.ts 的 toErrorMessage 取 ApiError.message：
+ *   http.ts 已按错误码从 src/constants/error-code.ts 取出文案，这里不写死任何错误文案。
  *
  * 城市不分页（见契约 listCities），所以这里没有使用 src/composables/useTable.ts。
  *
@@ -19,18 +19,10 @@
 import { computed, getCurrentScope, onScopeDispose, readonly, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listCities, updateCity, type City } from '@/api/city'
-import { ApiError, isErrorCode } from '@/api/http'
-import { CLIENT_ERROR_MESSAGES, ERROR_CODE } from '@/constants/error-code'
+import { isErrorCode } from '@/api/http'
+import { ERROR_CODE } from '@/constants/error-code'
 import { fulfillmentChangedMessage, toggleFulfillmentInput } from '../model/city-form'
-
-/**
- * 取出可以直接提示给店员的错误文案。
- * ApiError 的 message 已由 http.ts 按错误码取自 src/constants/error-code.ts；其他错误用通用提示。
- * 参数：捕获到的错误。返回：中文文案。
- */
-export function toErrorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : CLIENT_ERROR_MESSAGES.http
-}
+import { toErrorMessage } from '../model/error-message'
 
 export function useCityList() {
   const cities = shallowRef<City[]>([])
