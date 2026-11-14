@@ -37,6 +37,14 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/city/CityListView.vue'),
         meta: { title: '城市' },
       },
+
+      // 商城类目（W-04）
+      {
+        path: 'mall-categories',
+        name: 'MallCategoryList',
+        component: () => import('@/views/mall-category/MallCategoryListView.vue'),
+        meta: { title: '商城类目' },
+      },
     ],
   },
 
