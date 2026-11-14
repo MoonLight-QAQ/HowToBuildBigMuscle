@@ -37,6 +37,18 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/city/CityListView.vue'),
         meta: { title: '城市' },
       },
+      {
+        path: 'orders',
+        name: 'OrderList',
+        component: () => import('@/views/order/OrderRouteView.vue'),
+        meta: { title: '订单' },
+      },
+      {
+        path: 'orders/:id',
+        name: 'OrderDetail',
+        component: () => import('@/views/order/OrderRouteView.vue'),
+        meta: { title: '订单详情' },
+      },
     ],
   },
 
