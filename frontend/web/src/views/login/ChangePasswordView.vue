@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormItemRule, type FormRules } from 'element-plus'
 import { changePassword } from '@/api/auth'
+import { LOGOUT_UNCONFIRMED_MESSAGE } from '@/constants/error-code'
 import { HOME_PATH, LOGIN_PATH } from '@/router/guard'
 import { useAuthStore } from '@/stores/auth'
 import { getChangePasswordErrorMessage, validateNewPasswordConfirm } from './rules'
@@ -56,6 +57,23 @@ async function submit(): Promise<void> {
     ElMessage.error(getChangePasswordErrorMessage(error))
   } finally {
     submitting.value = false
+  }
+}
+
+const loggingOut = ref(false)
+
+/**
+ * 首次登录时页面没有侧栏和顶栏，从这里退出登录（如想换个账号登录）。
+ * 与 AdminLayout 相同：服务端确认会话已结束才回登录页；不能确认时留在本页并提示，可以再点一次重试。
+ */
+async function logout(): Promise<void> {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    if ((await authStore.logout()) === 'ended') await router.replace(LOGIN_PATH)
+    else ElMessage.error(LOGOUT_UNCONFIRMED_MESSAGE)
+  } finally {
+    loggingOut.value = false
   }
 }
 </script>
@@ -112,7 +130,8 @@ async function submit(): Promise<void> {
           至少 12 位，不能是常见密码，不能和旧密码相同。建议用密码管理器生成，不要和其他网站共用。
         </p>
         <div class="change-password-page__actions">
-          <el-button v-if="!isFirstLogin" @click="router.push(HOME_PATH)">返回后台</el-button>
+          <el-button v-if="isFirstLogin" :loading="loggingOut" @click="logout">退出登录</el-button>
+          <el-button v-else @click="router.push(HOME_PATH)">返回后台</el-button>
           <el-button type="primary" native-type="submit" :loading="submitting">改密码</el-button>
         </div>
       </el-form>

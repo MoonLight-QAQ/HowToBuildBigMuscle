@@ -25,7 +25,7 @@ describe('getLoginErrorMessage', () => {
 describe('getChangePasswordErrorMessage', () => {
   it.each([
     ['BAD_PASSWORD 提示旧密码错误', business('BAD_PASSWORD', 401), '旧密码错误'],
-    ['WEAK_PASSWORD', business('WEAK_PASSWORD'), '新密码至少 12 位，且不能是常见密码'],
+    ['WEAK_PASSWORD', business('WEAK_PASSWORD'), '新密码至少 12 位，且不能是常见密码或旧密码'],
     ['超时', new ApiError('timeout'), '请求超时，请稍后重试'],
     ['非 ApiError', 'oops', '请求失败，请稍后重试'],
   ])('%s', (_, error, message) => {
