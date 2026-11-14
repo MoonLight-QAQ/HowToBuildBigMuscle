@@ -68,3 +68,10 @@ frontend/web/src/views/city/
 frontend/web/src/api/city.ts
 frontend/web/src/mocks/handlers/city.ts
 frontend/web/src/mocks/data/city.ts
+
+# W-04 商城类目（#27）
+# router/index.ts 中的商城类目路由、mocks/handlers/index.ts 中的注册不锁定，原因同 W-02。
+frontend/web/src/views/mall-category/
+frontend/web/src/api/mall-category.ts
+frontend/web/src/mocks/handlers/mall-category.ts
+frontend/web/src/mocks/data/mall-category.ts
