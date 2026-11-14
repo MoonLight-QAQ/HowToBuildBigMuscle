@@ -254,6 +254,31 @@ export const authHandlers: HttpHandler[] = [
   }),
 ]
 
+/** 自行判断会话、不受统一拦截的接口（docs/api/conventions.md「管理端」一节） */
+const SESSION_EXEMPT_PATHS = ['/login', '/logout', '/me', '/password']
+
+/**
+ * 统一的会话拦截。在 handlers/index.ts 中注册在所有业务 handler 之前，业务 mock 不用各自判断：
+ * - 没有会话或会话已过期：401 NEED_LOGIN
+ * - 须先改密码：403 PASSWORD_CHANGE_REQUIRED
+ * - 其他情况不返回响应，交给后面的 handler 处理
+ * 被拦下的请求不会到达业务 handler，所以不会改动任何模拟数据。
+ */
+export const sessionGate: HttpHandler = http.all(`${baseURL}/*`, ({ request }) => {
+  const { pathname } = new URL(request.url)
+  // baseURL 可能是相对路径，以请求地址为基准解析后再比较
+  const exempt = SESSION_EXEMPT_PATHS.some(
+    (path) => new URL(`${baseURL}${path}`, request.url).pathname === pathname,
+  )
+  if (exempt) return undefined
+  const current = currentSession()
+  if (!current) return needLogin()
+  if (current.target.admin.mustChangePassword) {
+    return errorResponse(ERROR_CODE.PASSWORD_CHANGE_REQUIRED, 403)
+  }
+  return undefined
+})
+
 /**
  * 测试用：把模拟服务端恢复到初始状态（清除会话、账号和失败计数），并可替换当前时间。
  * 同时清除 sessionStorage 中保存的状态。

@@ -1,12 +1,26 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw/http'
 import { setupServer } from 'msw/node'
 import { LOGIN_LOCK, MOCK_ADMIN_ACCOUNTS } from '@/mocks/data/auth'
 
 const baseURL = 'http://localhost/api/admin'
 vi.stubEnv('VITE_API_BASE_URL', baseURL)
-const { authHandlers, isWeakPassword, resetAuthMock } = await import('./auth')
-const server = setupServer(...authHandlers)
+const { authHandlers, isWeakPassword, resetAuthMock, sessionGate } = await import('./auth')
+
+// 与 handlers/index.ts 顺序一致：会话拦截在最前。
+// 模拟一个业务模块，用计数器检查被拦下的写操作有没有生效
+let businessWrites = 0
+const businessHandlers = [
+  http.get(`${baseURL}/__test__/items`, () =>
+    HttpResponse.json({ ok: true, data: businessWrites }),
+  ),
+  http.post(`${baseURL}/__test__/items`, () => {
+    businessWrites += 1
+    return HttpResponse.json({ ok: true, data: businessWrites })
+  }),
+]
+const server = setupServer(sessionGate, ...authHandlers, ...businessHandlers)
 
 const [staff, newbie] = MOCK_ADMIN_ACCOUNTS as [
   (typeof MOCK_ADMIN_ACCOUNTS)[number],
@@ -18,6 +32,7 @@ let currentTime = START
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 beforeEach(() => {
   currentTime = START
+  businessWrites = 0
   resetAuthMock({ now: () => currentTime })
 })
 afterAll(() => {
@@ -186,6 +201,53 @@ describe('POST /password', () => {
     await post('/password', { oldPassword: newbie.password, newPassword: strongPassword })
     resetAuthMock({ now: () => currentTime })
     expect((await login(newbie.admin.account, newbie.password)).status).toBe(200)
+  })
+})
+
+describe('统一的会话拦截 sessionGate', () => {
+  const items = `${baseURL}/__test__/items`
+
+  async function expectRejected(response: Response, status: number, code: string) {
+    expect(response.status).toBe(status)
+    expect(await response.json()).toMatchObject({ ok: false, code })
+  }
+
+  it('未登录时业务接口的读写都返回 NEED_LOGIN，写操作不生效', async () => {
+    await expectRejected(await fetch(items), 401, 'NEED_LOGIN')
+    await expectRejected(await post('/__test__/items'), 401, 'NEED_LOGIN')
+    expect(businessWrites).toBe(0)
+  })
+
+  it('登录后放行，退出后读写又返回 NEED_LOGIN，数据不变', async () => {
+    await login(staff.admin.account, staff.password)
+    expect(await (await post('/__test__/items')).json()).toEqual({ ok: true, data: 1 })
+
+    await post('/logout')
+    await expectRejected(await fetch(items), 401, 'NEED_LOGIN')
+    await expectRejected(await post('/__test__/items'), 401, 'NEED_LOGIN')
+    expect(businessWrites).toBe(1)
+  })
+
+  it('通行证过期后返回 NEED_LOGIN', async () => {
+    await login(staff.admin.account, staff.password)
+    currentTime += 30 * 24 * 60 * 60 * 1000
+    await expectRejected(await fetch(items), 401, 'NEED_LOGIN')
+  })
+
+  it('须先改密码时业务接口返回 PASSWORD_CHANGE_REQUIRED，/me 不受影响', async () => {
+    await login(newbie.admin.account, newbie.password)
+    await expectRejected(await fetch(items), 403, 'PASSWORD_CHANGE_REQUIRED')
+    await expectRejected(await post('/__test__/items'), 403, 'PASSWORD_CHANGE_REQUIRED')
+    expect(businessWrites).toBe(0)
+    expect((await fetch(`${baseURL}/me`)).status).toBe(200)
+  })
+
+  it('白名单内的接口不被拦截，由登录接口自己处理', async () => {
+    // 未登录也能登录；须先改密码时也能改密码和退出
+    expect((await login(newbie.admin.account, newbie.password)).status).toBe(200)
+    const password = await post('/password', { oldPassword: 'wrong', newPassword: 'x' })
+    expect(await password.json()).toMatchObject({ code: 'BAD_PASSWORD' })
+    expect((await post('/logout')).status).toBe(200)
   })
 })
 

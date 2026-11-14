@@ -1,7 +1,7 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
 import type { components } from '@/api/generated/admin'
 import { ERROR_CODE } from '@/constants/error-code'
-import { authHandlers } from './auth'
+import { authHandlers, sessionGate } from './auth'
 
 /**
  * 中文：未注册的管理接口明确失败；无输入，返回契约错误，不记录或回显请求资料。
@@ -19,6 +19,9 @@ function missingMock() {
 }
 
 export const handlers: HttpHandler[] = [
+  // 统一的会话拦截放在最前：未登录返回 401、须先改密码返回 403，业务 mock 不用各自判断。
+  // 登录相关接口在它的白名单里，不受拦截。
+  sessionGate,
   ...authHandlers,
   // 后续模块的 handler 放在兜底之前；未注册的管理接口不透传到真实网络。
   http.all(`${import.meta.env.VITE_API_BASE_URL}/*`, missingMock),
