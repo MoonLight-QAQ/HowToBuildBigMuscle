@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
-import type { components } from '@/api/generated/admin'
-import { http, isErrorCode } from '@/api/http'
+// logout 改名为 postLogout，避免与本 store 的 logout 重名
+import { getMe, logout as postLogout, type LoginResult } from '@/api/auth'
+import { isErrorCode } from '@/api/http'
 import { ERROR_CODE } from '@/constants/error-code'
 import {
   CHANGE_PASSWORD_PATH,
@@ -13,8 +14,6 @@ import {
 } from '@/router/guard'
 import type { AuthAdapter } from '@/types/http'
 
-type LoginResult = components['schemas']['LoginResult']
-
 /**
  * 退出登录的结果。
  * - ended：服务端已确认会话结束（成功，或返回 NEED_LOGIN 表示本来就已失效）
@@ -22,49 +21,10 @@ type LoginResult = components['schemas']['LoginResult']
  */
 export type LogoutResult = 'ended' | 'unconfirmed'
 
-/**
- * 校验并取出登录状态（/login 和 /me 共用的 LoginResult），不符合契约时抛错。
- * 只取契约中的字段，多余字段不保留。
- */
-export function parseLoginResult(value: unknown): LoginResult {
-  if (typeof value !== 'object' || value === null) throw new Error('invalid-login-result')
-  const { expiresAt, admin } = value as Record<string, unknown>
-  if (typeof expiresAt !== 'string' || typeof admin !== 'object' || admin === null) {
-    throw new Error('invalid-login-result')
-  }
-  const { id, account, mustChangePassword } = admin as Record<string, unknown>
-  if (
-    typeof id !== 'string' ||
-    typeof account !== 'string' ||
-    typeof mustChangePassword !== 'boolean'
-  ) {
-    throw new Error('invalid-login-result')
-  }
-  return { expiresAt, admin: { id, account, mustChangePassword } }
-}
-
 /** 判断登录是否仍在有效期内。expiresAt 无法解析时视为已过期 */
 export function isSessionActive(expiresAt: string, now: number = Date.now()): boolean {
   const expiresAtMs = Date.parse(expiresAt)
   return Number.isFinite(expiresAtMs) && expiresAtMs > now
-}
-
-// TODO(W-03)：以下两个临时的最小调用换成 src/api/auth.ts 中的接口函数。
-// 两者都用 anonymous：/me 返回 NEED_LOGIN 只表示未登录，/logout 失败也照样清除本地状态，
-// 都由 store 自己处理，不需要请求层再通知跳转登录页。
-
-function fetchMe(): Promise<LoginResult> {
-  return http.request('/me', { anonymous: true, parse: parseLoginResult })
-}
-
-function postLogout(): Promise<void> {
-  return http.request('/logout', {
-    method: 'POST',
-    anonymous: true,
-    parse: (data) => {
-      if (data !== null) throw new Error('invalid-logout-result')
-    },
-  })
 }
 
 /**
@@ -112,7 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
    */
   function confirm(): Promise<void> {
     if (confirmed.value) return Promise.resolve()
-    confirming ??= fetchMe()
+    confirming ??= getMe()
       .then(
         (result) => {
           if (!confirmed.value) setSession(result)
