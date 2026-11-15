@@ -22,7 +22,12 @@ const isFirstLogin = computed(() => authStore.mustChangePassword)
 
 const formRef = ref<FormInstance>()
 const form = reactive<ChangePasswordForm>({ oldPassword: '', newPassword: '', again: '' })
-const submitting = ref(false)
+
+/**
+ * 正在进行的操作。改密码和退出登录互斥：同一时间只允许一个在途，
+ * 否则两者的结果可能互相覆盖（如退出后又被改密结果清除、跳转）。
+ */
+const pending = ref<'submit' | 'logout' | null>(null)
 
 const confirmRule: FormItemRule = {
   trigger: 'blur',
@@ -41,39 +46,49 @@ const rules: FormRules<ChangePasswordForm> = {
 /**
  * 改密码：两次输入不一致由表单校验拦下，不发请求。
  * 成功后服务器作废该账号的所有通行证，这里清除本地登录状态并回到登录页。
+ * 从表单校验开始就占用 pending，校验期间也不能退出登录。
+ * 发请求前记下会话代次；结果回来时会话已经换过（退出、登录失效后重新登录等），
+ * 这个结果属于旧会话，不清除、不跳转、不提示，以免影响新会话。
  */
 async function submit(): Promise<void> {
-  if (submitting.value) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
+  if (pending.value) return
+  pending.value = 'submit'
   try {
-    await changePassword({ oldPassword: form.oldPassword, newPassword: form.newPassword })
+    const valid = await formRef.value?.validate().catch(() => false)
+    if (!valid) return
+
+    const generation = authStore.generation
+    try {
+      await changePassword({ oldPassword: form.oldPassword, newPassword: form.newPassword })
+    } catch (error) {
+      if (authStore.generation === generation) {
+        ElMessage.error(getChangePasswordErrorMessage(error))
+      }
+      return
+    }
+    if (authStore.generation !== generation) return
     authStore.clear()
     ElMessage.success('密码已修改，请用新密码重新登录')
     await router.replace(LOGIN_PATH)
-  } catch (error) {
-    ElMessage.error(getChangePasswordErrorMessage(error))
   } finally {
-    submitting.value = false
+    pending.value = null
   }
 }
-
-const loggingOut = ref(false)
 
 /**
  * 首次登录时页面没有侧栏和顶栏，从这里退出登录（如想换个账号登录）。
  * 与 AdminLayout 相同：服务端确认会话已结束才回登录页；不能确认时留在本页并提示，可以再点一次重试。
+ * 与改密码互斥；不能确认时，只在会话没有换过的情况下提示。
  */
 async function logout(): Promise<void> {
-  if (loggingOut.value) return
-  loggingOut.value = true
+  if (pending.value) return
+  pending.value = 'logout'
   try {
+    const generation = authStore.generation
     if ((await authStore.logout()) === 'ended') await router.replace(LOGIN_PATH)
-    else ElMessage.error(LOGOUT_UNCONFIRMED_MESSAGE)
+    else if (authStore.generation === generation) ElMessage.error(LOGOUT_UNCONFIRMED_MESSAGE)
   } finally {
-    loggingOut.value = false
+    pending.value = null
   }
 }
 </script>
@@ -130,9 +145,23 @@ async function logout(): Promise<void> {
           至少 12 位，不能是常见密码，不能和旧密码相同。建议用密码管理器生成，不要和其他网站共用。
         </p>
         <div class="change-password-page__actions">
-          <el-button v-if="isFirstLogin" :loading="loggingOut" @click="logout">退出登录</el-button>
+          <el-button
+            v-if="isFirstLogin"
+            :loading="pending === 'logout'"
+            :disabled="pending === 'submit'"
+            @click="logout"
+          >
+            退出登录
+          </el-button>
           <el-button v-else @click="router.push(HOME_PATH)">返回后台</el-button>
-          <el-button type="primary" native-type="submit" :loading="submitting">改密码</el-button>
+          <el-button
+            type="primary"
+            native-type="submit"
+            :loading="pending === 'submit'"
+            :disabled="pending === 'logout'"
+          >
+            改密码
+          </el-button>
         </div>
       </el-form>
     </el-card>

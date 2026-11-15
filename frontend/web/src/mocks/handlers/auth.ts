@@ -245,10 +245,11 @@ export const authHandlers: HttpHandler[] = [
       return errorResponse(ERROR_CODE.WEAK_PASSWORD, 400)
     }
 
-    // 改好后该账号的所有通行证作废，包括当前这一个
+    // 改好后该账号的所有通行证作废，包括当前这一个。
+    // 只作废 target 的会话：target 在读请求体之前确定，期间会话若已换成别的账号，不能误清
     target.password = newPassword
     target.admin.mustChangePassword = false
-    state.session = null
+    if (state.session?.account === target.admin.account) state.session = null
     saveState()
     return HttpResponse.json({ ok: true, data: null })
   }),
