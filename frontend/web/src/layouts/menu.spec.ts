@@ -29,4 +29,9 @@ describe('MENU_GROUPS', () => {
     const paths = MENU_GROUPS.flatMap((group) => group.items.map((item) => item.path))
     expect(new Set(paths).size).toBe(paths.length)
   })
+
+  it('「账号」分组下有修改密码入口（原型：账号 › 修改密码）', () => {
+    const account = MENU_GROUPS.find((group) => group.title === '账号')
+    expect(account?.items).toEqual([{ path: '/change-password', label: '修改密码' }])
+  })
 })

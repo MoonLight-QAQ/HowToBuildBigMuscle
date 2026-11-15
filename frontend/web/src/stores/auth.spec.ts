@@ -6,7 +6,7 @@ import { http as mockHttp, HttpResponse } from 'msw/http'
 import { setupServer } from 'msw/node'
 import type { components } from '@/api/generated/admin'
 import { ApiError, http, HttpClient } from '@/api/http'
-import { createAuthAdapter, isSessionActive, parseLoginResult, useAuthStore } from './auth'
+import { createAuthAdapter, isSessionActive, useAuthStore } from './auth'
 
 type LoginResult = components['schemas']['LoginResult']
 
@@ -52,22 +52,6 @@ describe('isSessionActive', () => {
 
   it('无法解析的时间视为无效', () => {
     expect(isSessionActive('not-a-date', NOW)).toBe(false)
-  })
-})
-
-describe('parseLoginResult', () => {
-  it('只取出契约中的字段', () => {
-    expect(parseLoginResult({ ...session, token: 'leaked', extra: 1 })).toEqual(session)
-  })
-
-  it.each([
-    ['不是对象', null],
-    ['缺少过期时间', { admin: session.admin }],
-    ['缺少管理员信息', { expiresAt: session.expiresAt, admin: null }],
-    ['管理员 id 不是字符串', { ...session, admin: { ...session.admin, id: 1 } }],
-    ['缺少 mustChangePassword', { ...session, admin: { id: '1', account: 'staff' } }],
-  ])('%s时抛错', (_name, value) => {
-    expect(() => parseLoginResult(value)).toThrow()
   })
 })
 

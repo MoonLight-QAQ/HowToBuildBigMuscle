@@ -68,3 +68,10 @@ frontend/web/src/views/city/
 frontend/web/src/api/city.ts
 frontend/web/src/mocks/handlers/city.ts
 frontend/web/src/mocks/data/city.ts
+
+# W-03 登录（#26）
+# 改密码页 ChangePasswordView 也在 views/login/ 下。
+frontend/web/src/views/login/
+frontend/web/src/api/auth.ts
+frontend/web/src/mocks/handlers/auth.ts
+frontend/web/src/mocks/data/auth.ts

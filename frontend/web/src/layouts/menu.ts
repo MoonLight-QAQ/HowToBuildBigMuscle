@@ -1,6 +1,8 @@
 // 后台左侧导航。分组和顺序以原型 docs/prototype/admin 为准，路径见 frontend/web/AGENTS.md。
 // TODO(W-12)：原型中「订单、退款、举报」带待处理数量角标，由概览任务 W-12 接入。
 
+import { CHANGE_PASSWORD_PATH } from '@/router/guard'
+
 export interface MenuItem {
   path: string
   label: string
@@ -36,6 +38,11 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/listings', label: '闲置浏览' },
       { path: '/flea-categories', label: '闲置类目' },
     ],
+  },
+  {
+    title: '账号',
+    // 改密码页整页显示、不在后台布局内，从这里进入后用页面上的「返回后台」回来
+    items: [{ path: CHANGE_PASSWORD_PATH, label: '修改密码' }],
   },
 ]
 
